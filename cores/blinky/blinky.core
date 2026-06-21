@@ -1,0 +1,41 @@
+CAPI=2:
+name: ::blinky:1.0.0
+description: Parameterized LED blinker
+
+filesets:
+  rtl:
+    files:
+      - src/blinky.sv
+    file_type: systemVerilogSource
+
+  cocotb:
+    files:
+      - tb/test_blinky.py
+    file_type: user
+
+targets:
+  default:
+    filesets: [rtl]
+    toplevel: blinky
+
+  sim:
+    filesets: [rtl, cocotb]
+    toplevel: blinky
+    default_tool: verilator
+    tools:
+      verilator:
+        verilator_options: [--trace, -Wno-fatal]
+        mode: cc
+      icarus:
+        iverilog_options: [-g2012]
+    parameters:
+      - CLK_FREQ=1200
+      - BLINK_HZ=1
+
+parameters:
+  CLK_FREQ:
+    datatype: int
+    paramtype: vlogparam
+  BLINK_HZ:
+    datatype: int
+    paramtype: vlogparam

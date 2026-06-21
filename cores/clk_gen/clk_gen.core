@@ -1,0 +1,14 @@
+CAPI=2:
+name: ::clk_gen:1.0.0
+description: MMCM clock generator for Xilinx 7-series (12 MHz to 100 MHz default)
+
+filesets:
+  rtl:
+    files:
+      - src/clk_gen.sv
+    file_type: systemVerilogSource
+
+targets:
+  default:
+    filesets: [rtl]
+    toplevel: clk_gen

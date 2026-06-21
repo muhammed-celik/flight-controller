@@ -1,0 +1,46 @@
+CAPI=2:
+name: ::cmod_a7_top:1.0.0
+description: Top-level design for CMOD Artix A7-35T (depends on clk_gen + blinky)
+
+filesets:
+  rtl:
+    files:
+      - src/top.sv
+    file_type: systemVerilogSource
+    depend:
+      - ::clk_gen:1.0.0
+      - ::blinky:1.0.0
+
+  cocotb:
+    files:
+      - tb/test_top.py
+    file_type: user
+
+  constraints:
+    files:
+      - constraints/cmod_a7.xdc
+    file_type: xdc
+
+targets:
+  default: &default
+    filesets: [rtl]
+    toplevel: top
+
+  sim:
+    filesets: [rtl, cocotb]
+    toplevel: top
+    default_tool: verilator
+    tools:
+      verilator:
+        verilator_options: [--trace, -Wno-fatal]
+        mode: cc
+      icarus:
+        iverilog_options: [-g2012]
+
+  synth:
+    <<: *default
+    filesets: [rtl, constraints]
+    default_tool: vivado
+    tools:
+      vivado:
+        part: xc7a35tcpg236-1

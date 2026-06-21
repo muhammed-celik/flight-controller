@@ -1,0 +1,39 @@
+# FuseSoC build output
+build/
+
+# Cocotb artifacts
+sim_build/
+results.xml
+__pycache__/
+*.pyc
+
+# Verilator
+*.vcd
+*.fst
+obj_dir/
+
+# Vivado
+*.bit
+*.ltx
+*.xpr
+*.runs/
+*.cache/
+*.hw/
+*.ip_user_files/
+*.jou
+*.log
+*.str
+vivado*.backup*/
+.Xil/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+*.swp
+*.swo
+*~
+
+# Temp files
+.tmp/
