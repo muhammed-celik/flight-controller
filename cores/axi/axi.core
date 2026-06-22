@@ -1,0 +1,15 @@
+CAPI=2:
+name: ::axi:1.0.0
+description: AXI4 and AXI4-Lite interface definitions and package
+
+filesets:
+  rtl:
+    files:
+      - src/axi_pkg.sv
+      - src/axi_if.sv
+      - src/axi_lite_if.sv
+    file_type: systemVerilogSource
+
+targets:
+  default:
+    filesets: [rtl]
