@@ -44,7 +44,8 @@ determines the achievable control bandwidth and stability margin.
 - Predictable, constant group delay
 - Tunable cutoff via single coefficient (α)
 - Used in Betaflight, KISS, and all major FC firmware
-- Adequate noise rejection when combined with ICM-42688-P's hardware AAF
+- Adequate as a first stage when combined with the MPU9250's configured DLPF;
+  final cutoff/notch choices must be based on propeller-on vibration logs
 
 **Why not FIR:**
 - A 50-tap FIR at 1 kHz with fc=80 Hz has group delay = 25 ms (12.5× worse than PT1)
@@ -197,8 +198,8 @@ y[n] = b0×x[n] + b1×x[n-1] + b2×x[n-2] - a1×y[n-1] - a2×y[n-2]
 
 | Signal           | Width | Format          | Dest             | Description                    |
 |------------------|-------|-----------------|------------------|--------------------------------|
-| filt_accel_x/y/z | 32    | Q16.16 signed   | Attitude Est.    | Filtered acceleration          |
-| filt_gyro_x/y/z  | 32    | Q16.16 signed   | Attitude Est./PID| Filtered angular rate          |
+| filt_accel_x/y/z | 32    | Q16.16 signed   | RTL estimator/AXI | Filtered acceleration for complementary filter or CPU |
+| filt_gyro_x/y/z  | 32    | Q16.16 signed   | RTL PID/AXI      | Filtered angular rate          |
 | filt_valid        | 1     | Pulse           | Next stage       | Filtered data ready            |
 
 ### 4.3 Configuration
@@ -211,7 +212,8 @@ y[n] = b0×x[n] + b1×x[n-1] + b2×x[n-2] - a1×y[n-1] - a2×y[n-2]
 
 Note: Gyro and accel have different cutoff frequencies because:
 - Gyro feeds rate PID (needs higher bandwidth, 80 Hz)
-- Accel feeds attitude estimate (can be slower, 20 Hz — only for gravity direction)
+- Accel feeds either the RTL complementary filter or CPU EKF; its cutoff must
+  preserve estimator dynamics rather than assuming it is gravity-only
 
 ---
 

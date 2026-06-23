@@ -28,11 +28,13 @@ being a limiting factor.
 
 | Stage | Latency/Period | Bandwidth | Limits What? |
 |-------|---------------|-----------|--------------|
-| IMU sampling | 1 ms (1 kHz) | 500 Hz Nyquist | Filter input rate |
+| GY-91 MPU9250 sampling | 1 ms (1 kHz) | 500 Hz Nyquist | Filter input rate |
+| I²C IMU burst | ~0.4 ms | — | Acquisition latency and bus occupancy |
 | Calibration | ~100 ns | — | Nothing (passthrough) |
-| IIR filter (gyro fc=80 Hz) | 2 ms group delay | 80 Hz | PID input bandwidth |
-| Attitude estimation | ~400 ns | — | Nothing (computation) |
-| PID computation | ~1 µs | — | Nothing (computation) |
+| IIR filter | Measured/tuned | Configurable | Rate-loop input bandwidth |
+| RTL complementary filter | Bounded RTL latency | 500 Hz target | Outer-loop attitude in RTL mode |
+| Optional CPU EKF | Must finish before mailbox deadline | 500 Hz target | Outer-loop attitude in EKF mode |
+| RTL PID computation | ~1 µs target | — | Negligible after RTL verification |
 | Motor mixer | ~50 ns | — | Nothing (computation) |
 | DSHOT600 frame TX | 26.7 µs | 37 kHz max rate | ESC command rate |
 | ESC internal loop | 21–42 µs | 24–48 kHz | Commutation timing |
@@ -73,7 +75,7 @@ The motor can track small corrections at ~40 Hz, but large throttle changes
 | Component | Spec | Justification |
 |-----------|------|---------------|
 | IMU at 1 kHz | 25× motor BW | Oversampling for filter settling, noise averaging, bias estimation |
-| Gyro filter fc=80 Hz | 2× motor BW | Clean data up to motor's useful range, Nyquist margin |
+| Gyro filter initial fc=40-80 Hz | Approximately 1-2× motor BW | Tune from MPU9250 and airframe logs |
 | Accel filter fc=20 Hz | Gravity-only | Only measures tilt (quasi-static), vibration rejection |
 | Control loop 500 Hz | 12× motor BW | Sufficient phase margin, low latency for rate loop |
 | DSHOT600 | 74× loop rate | Protocol simplicity, not speed, drove this choice |
@@ -84,7 +86,7 @@ The motor can track small corrections at ~40 Hz, but large throttle changes
 
 | Mismatch | Consequence |
 |----------|-------------|
-| IMU too slow (< 200 Hz) | Filter cannot achieve fc=80 Hz (Nyquist), must lower cutoff |
+| IMU too slow (< 200 Hz) | Insufficient sampling margin for the intended rate loop |
 | Filter fc too high (> motor BW) | Noise passes through, motors buzz, no performance gain |
 | Filter fc too low (< 20 Hz) | Excessive phase lag, oscillations, instability |
 | Control loop too slow (< 100 Hz) | Phase margin lost, can't control fast disturbances |
@@ -239,16 +241,16 @@ Switch to triblade for more thrust once control loop is tuned.
 
 | Sensor | Required Rate | Actual Rate | Required Accuracy | Actual | Verdict |
 |--------|--------------|-------------|-------------------|--------|---------|
-| Gyro | >160 Hz (2× motor BW) | 1000 Hz | <0.1°/s noise at fc | 0.025°/s | Over-spec (good) |
-| Accel | >4 Hz (2× tilt BW) | 1000 Hz | <0.01g at fc | 0.003g | Over-spec (good) |
-| Baro | >2 Hz (2× alt BW) | 25 Hz | <1m noise | 0.25m | Over-spec (good) |
-| Mag | >2 Hz (2× heading BW) | 50 Hz | <2° heading | <1° | Over-spec (good) |
+| MPU9250 gyro | >160 Hz (2× motor BW) | 1000 Hz target | Determine from logs | Not yet characterized | Validate on mounted airframe |
+| MPU9250 accel | >4 Hz (2× tilt BW) | 1000 Hz target | Determine from estimator needs | Not yet characterized | Validate vibration rejection |
+| BMP280 baro | >2 Hz (2× alt BW) | 25-50 Hz target | <1 m after filtering | Not yet characterized | Validate enclosure/prop-wash effects |
+| AK8963 mag | >2 Hz (2× heading BW) | 50-100 Hz target | <2° after calibration | Not yet characterized | Validate motor-current interference |
 
 ### 6.2 Where You Could Save Resources (But Shouldn't)
 
 | Optimization | Savings | Risk | Verdict |
 |-------------|---------|------|---------|
-| Reduce IMU to 500 Hz | ~0 (SPI is fast anyway) | Worse filter transients | Don't bother |
+| Reduce IMU to 500 Hz | Frees substantial shared-I²C time | Less rate-loop sampling margin | Profile before changing |
 | Reduce baro to 10 Hz | ~60% I²C bus time | None for hover | Acceptable |
 | Reduce mag to 10 Hz | ~80% I²C bus time | None for RC flight | Acceptable |
 | Remove baro entirely | 1 I²C device less | No altitude hold | OK for manual-only |
@@ -259,8 +261,8 @@ Switch to triblade for more thrust once control loop is tuned.
 
 | Spec | Why It's Critical |
 |------|-------------------|
-| Gyro at ≥500 Hz | Filter needs oversampling to achieve fc=80 Hz cleanly |
-| Gyro noise <0.01°/s/√Hz | Directly sets minimum filter cutoff → phase margin |
+| Gyro at ≥500 Hz | Maintains sampling margin for a 250-500 Hz rate loop |
+| Measured vibration/noise budget | Directly determines filter and notch settings |
 | Control loop ≥250 Hz | Below this, rate loop phase margin becomes dangerous |
 | DSHOT (not PWM) | PWM jitter creates limit cycles in PID at high gains |
 | ESC loop ≥24 kHz | Below this, commutation noise feeds back into vibration |
@@ -271,39 +273,34 @@ Switch to triblade for more thrust once control loop is tuned.
 
 ### 7.1 Timing Budget Per Control Period (2 ms = 500 Hz)
 
-| Task | Time | % of 2 ms |
-|------|------|-----------|
-| IMU SPI burst read | 14.5 µs | 0.73% |
-| Calibration | 0.1 µs | 0.005% |
-| IIR filter | 0.1 µs | 0.005% |
-| Attitude estimation (CORDIC) | 0.4 µs | 0.02% |
-| PID (6 instances) | 1.0 µs | 0.05% |
-| Motor mixer | 0.05 µs | 0.003% |
-| DSHOT600 frame TX | 26.7 µs | 1.34% |
-| **Total active** | **~43 µs** | **2.15%** |
-| **Idle (available for CPU)** | **~1957 µs** | **97.85%** |
+| Task | Initial budget | Owner |
+|---|---:|---|
+| MPU9250 I²C burst (one of two 1 kHz reads) | ~0.4 ms each | RTL bus engine |
+| AK8963/BMP280 scheduled reads | Amortized in free bus slots | RTL scheduler |
+| Calibration + PT1 + rate PID + mixer | <10 µs target | RTL datapath |
+| DSHOT600 frame transmission | 26.7 µs | RTL output engine |
+| Complementary filter + CORDIC | Profile after RTL implementation | RTL estimator |
+| AXI snapshot + EKF + mailbox | <1 ms target when enabled | CPU software |
 
-The FPGA pipeline uses only 2.15% of each control period. The remaining 98%
-is available for the RISC-V CPU to handle telemetry, parameter updates,
-calibration, and higher-level logic.
+I²C bus occupancy and both estimator implementations must be measured on the
+selected FPGA and exact GY-91 board. In EKF mode, execution also depends on CPU
+configuration and compiler options. The selected estimator has a freshness
+watchdog, while the RTL rate loop remains independent of either attitude path.
 
 ### 7.2 Latency Budget (Sensor Event to Motor Response)
 
 | Stage | Cumulative Latency |
 |-------|-------------------|
-| IMU sample captured | 0 µs |
-| SPI read complete | +14.5 µs |
-| Calibration + filter | +0.2 µs |
-| Attitude + PID | +1.5 µs |
-| Mixer | +0.05 µs |
-| DSHOT frame start | +0 µs (immediate) |
-| DSHOT frame complete (ESC receives) | +26.7 µs |
-| ESC processes command | +21 µs (one ESC loop) |
-| Motor current begins changing | +0.1 ms |
-| **Total sensor-to-torque** | **~65 µs** |
+| MPU9250 sample becomes readable | 0 |
+| Shared-I²C burst completes | ~0.4 ms target |
+| RTL calibration/filter/rate PID/mixer | <0.01 ms target |
+| DSHOT frame completes | +0.0267 ms |
+| ESC processing and motor-current response | Device dependent |
 
-This 65 µs total latency is **30× faster** than the motor mechanical time constant
-(~20 ms), confirming the FPGA implementation adds negligible delay.
+The rate path does not wait for either attitude estimator. Complementary mode
+stays within RTL; EKF mode additionally includes AXI transfer and software
+execution. Both have separate validity/freshness monitoring. Final latency
+claims require logic-analyzer and software profiling measurements.
 
 ---
 
@@ -337,7 +334,7 @@ Once basic flight is achieved:
 1. Switch to BLHeli_32 ESCs (enable RPM telemetry)
 2. Add RPM-based notch filter (removes motor-frequency vibration)
 3. Try triblade props (more thrust, test if vibration is acceptable)
-4. Tune PID gains with Blackbox logging (from RISC-V CPU)
+4. Tune PID gains with Blackbox logging (from MicroBlaze or RV32 CPU)
 5. Enable altitude hold (barometer feedback)
 6. Enable heading hold (magnetometer feedback)
 ```

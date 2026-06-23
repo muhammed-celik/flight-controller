@@ -1,0 +1,50 @@
+CAPI=2:
+name: ::spi_master:1.0.0
+description: SPI Master module for synchronous low-speed communication
+
+filesets:
+  rtl:
+    files:
+      - src/spi_master_pkg.sv
+      - src/spi_master.sv
+    file_type: systemVerilogSource
+
+  cocotb:
+    files:
+      - tb/test_spi_master.py
+    file_type: user
+
+targets:
+  default:
+    filesets: [rtl]
+    toplevel: spi_master
+
+  sim:
+    filesets: [rtl, cocotb]
+    toplevel: spi_master
+    default_tool: verilator
+    tools:
+      verilator:
+        verilator_options: [--trace, -Wno-fatal]
+        mode: cc
+      icarus:
+        iverilog_options: [-g2012]
+    parameters:
+      - SYS_CLK_FREQ=100000000
+      - SCLK_FREQ=1000000
+      - SPI_MODE=3
+      - CS_CNT=2
+
+parameters:
+  SYS_CLK_FREQ:
+    datatype: int
+    paramtype: vlogparam
+  SCLK_FREQ:
+    datatype: int
+    paramtype: vlogparam
+  SPI_MODE:
+    datatype: int
+    paramtype: vlogparam
+  CS_CNT:
+    datatype: int
+    paramtype: vlogparam

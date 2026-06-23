@@ -14,14 +14,14 @@ degrade flight performance:
 - **Cross-axis coupling:** Rotation about X leaks into the Y reading. Typically
   0.5–2% for MEMS sensors. Ignored in first implementation.
 
-Without calibration, even the best sensor (ICM-42688-P) would produce unusable
+Without calibration, the selected MPU9250 can produce unusable
 attitude estimates after a few seconds of flight. The calibration module applies
 pre-computed corrections in real-time, every sample, with zero additional latency
 beyond a single multiply-add pipeline.
 
-**Gyro bias is the most critical error:** At 0.5°/hr drift rate for ICM-42688-P,
-the bias is small — but manufacturing variation means each individual sensor chip
-has a slightly different bias (typically ±1–5°/s at power-on). This MUST be
+**Gyro bias is the most critical error:** manufacturing variation and temperature
+mean each MPU9250 has a different power-on bias, commonly large enough to cause
+rapid attitude drift. This bias MUST be
 measured and subtracted before flight.
 
 ---
@@ -51,11 +51,13 @@ measured and subtracted before flight.
 - Stored in non-volatile memory (SPI flash or CPU RAM)
 - Loaded into FPGA registers via AXI before arming
 
-**Why not runtime adaptive:**
-- EKF-based bias estimation requires matrix operations (6×6)
-- Non-deterministic latency — incompatible with hard real-time RTL
-- Overkill for RC flight where bias drift is negligible over flight duration
-- Can be added later on the soft CPU as an outer-loop correction
+**Runtime adaptive calibration:**
+- When CPU EKF mode is selected, it can continuously estimate gyroscope bias.
+- Its bias estimate may be written back through the atomic AXI mailbox for
+  monitoring or slow correction.
+- The boot-time stationary estimate is required in both estimator modes and
+  prevents arming with a grossly biased sensor.
+- Deterministic per-sample offset/scale application remains in RTL.
 
 ---
 
@@ -112,9 +114,9 @@ b̂_gyro = (1/N) · Σᵢ₌₀ᴺ⁻¹ y_gyro[i]
 σ_bias_estimate = σ_sensor / √N
 ```
 
-Example: ICM-42688-P gyro noise = 0.0028 °/s/√Hz at 1 kHz bandwidth:
-- σ per sample = 0.0028 × √1000 = 0.089 °/s
-- After N=2000 average: σ_bias = 0.089 / √2000 = 0.002 °/s (excellent)
+For the MPU9250, estimate the actual stationary sample standard deviation from
+captured data rather than copying a different sensor's datasheet number. With
+`N=2000`, the standard error of the mean is approximately `sample_sigma/sqrt(N)`.
 
 **Accel bias at rest (level):**
 
@@ -129,7 +131,7 @@ the bias estimate will be wrong and the drone will think "level" is at an angle.
 
 ### 3.3 Scale Factor
 
-The nominal sensitivity of ICM-42688-P at ±2000°/s is:
+The nominal sensitivity of MPU9250 at ±2000°/s is:
 ```
 S_nominal = 16.4 LSB/(°/s)  →  conversion factor = 1/16.4 = 0.061 °/s/LSB
 ```
@@ -150,10 +152,8 @@ Gyro bias changes with temperature at approximately:
 b(T) = b₀ + TCO × (T - T_ref)
 ```
 
-Where TCO (Temperature Coefficient of Offset) is typically ±0.01 °/s/°C for ICM-42688-P.
-
-Over a 20°C temperature change: Δbias = 0.01 × 20 = 0.2°/s
-This is significant! Solutions:
+The coefficient is device- and unit-dependent; characterize it from logged
+MPU9250 temperature and stationary bias rather than assuming a value. Solutions:
 1. Re-calibrate bias if temperature changes >10°C (monitored by CPU)
 2. Apply linear temperature compensation (requires characterization)
 3. For initial implementation: ignore (flights are short, temperature stable)
@@ -235,7 +235,7 @@ FUNCTION q16_mul(a, b) → Q16.16:
 ### 5.2 Boot-Time Bias Estimation (CPU software)
 
 ```
-// Runs on RISC-V soft CPU at power-on
+// Runs on MicroBlaze or RV32 CPU at power-on
 FUNCTION estimate_bias():
     CONSTANT N = 2000
     sum_gx = sum_gy = sum_gz = 0

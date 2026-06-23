@@ -24,7 +24,7 @@ The outer loop runs at 500 Hz (matching the control loop) and outputs desired an
 |----------|------|------|----------|
 | Parallel PID (all axes simultaneously) | Lowest latency, simple timing | Uses 6× hardware (12 multipliers) | No |
 | Time-multiplexed PID (sequential axes) | Minimal DSP usage (4 DSP48E1 shared) | Adds pipeline latency (~12 clocks per instance) | **Yes** |
-| Software PID on soft-core CPU | Flexible, easy to modify gains | Jitter, slower update rate, uses many LUTs for CPU | No |
+| Software PID on MicroBlaze/RV32 | Flexible, easy to modify gains | Scheduling jitter enters the control path | No for inner rate loop |
 | PID with derivative filter (1st-order LPF on D-term) | Reduces noise amplification | Extra multiply per axis | Yes (combined) |
 | PI-D (derivative on measurement only) | Avoids derivative kick on setpoint change | Slightly different behavior on setpoint ramps | **Yes** |
 
@@ -88,6 +88,11 @@ Where MAX_OUTPUT in Q16.16 corresponds to the maximum torque command the mixer c
 
 ### 3.5 Cascaded Loop Structure
 
+The inner angular-rate loop is the hard real-time RTL loop. The outer attitude
+loop consumes a common attitude-error vector produced by the estimator adapter.
+That adapter uses wrapped Euler error for the RTL complementary filter or
+quaternion error for the CPU EKF.
+
 ```
                  Outer Loop (Angle)           Inner Loop (Rate)
 Setpoint ──→ [+]──→ [PID_angle] ──→ rate_setpoint ──→ [+]──→ [PID_rate] ──→ torque_cmd
@@ -126,8 +131,9 @@ All values use signed Q16.16 (32-bit):
 | `clk` | 1 | — | System | 100 MHz system clock |
 | `rst_n` | 1 | — | System | Active-low synchronous reset |
 | `ctrl_update` | 1 | Pulse | Timing Gen | 500 Hz strobe: start new PID computation |
-| `angle_setpoint[2:0]` | 3×32 | Q16.16 | RC Input | Desired angles (roll, pitch, yaw) from pilot |
-| `angle_measurement[2:0]` | 3×32 | Q16.16 | Attitude Est. | Estimated Euler angles |
+| `attitude_error[2:0]` | 3×32 | Q16.16 | Estimator adapter | Selected estimator's shortest-path attitude error |
+| `attitude_valid` | 1 | — | Estimator mux | Selected estimate is healthy and fresh |
+| `rate_setpoint_direct[2:0]` | 3×32 | Q16.16 | RC command mapper | Rate-mode fallback command |
 | `rate_measurement[2:0]` | 3×32 | Q16.16 | IMU Filter | Filtered gyroscope angular rates (rad/s) |
 | `gains_kp_outer[2:0]` | 3×32 | Q16.16 | AXI Regs | Proportional gain, outer loop (per axis) |
 | `gains_ki_outer[2:0]` | 3×32 | Q16.16 | AXI Regs | Integral gain, outer loop (per axis) |
@@ -147,6 +153,10 @@ All values use signed Q16.16 (32-bit):
 | `pid_done` | 1 | Pulse | Timing Gen | Asserted when all 6 PID instances complete |
 | `saturated[2:0]` | 3 | — | Telemetry | Per-axis output saturation flag |
 
+If `attitude_valid` is false, the outer loop is disabled and its integrators are
+cleared. The inner rate loop remains available for a configured rate-mode
+fallback. Hard failsafe logic may still disarm for independent critical faults.
+
 ---
 
 ## 5. Algorithm
@@ -161,12 +171,19 @@ ON ctrl_update pulse:
         assert pid_done
         return
 
-    // --- Outer Loop (Angle → Rate Setpoint) ---
-    FOR axis IN {roll, pitch, yaw}:
-        error_outer = angle_setpoint[axis] - angle_measurement[axis]
-
+    // --- Outer Loop (Selected attitude estimator → Rate Setpoint) ---
+    if NOT attitude_valid:
+        clear outer integrators
+        rate_setpoint = rate_setpoint_direct
+        skip outer loop
+    ELSE:
+      error_outer = attitude_error
+      FOR axis IN {roll, pitch, yaw}:
         // Proportional
         P_outer = gains_kp_outer[axis] * error_outer  // Q16.16 multiply
+
+        // Damping from measured body rate; avoids quaternion setpoint kick
+        D_outer = -gains_kd_outer[axis] * rate_measurement[axis]
 
         // Integral with anti-windup
         tentative_I_outer = integral_outer[axis] + gains_ki_outer[axis] * error_outer * dt
@@ -174,10 +191,6 @@ ON ctrl_update pulse:
         IF |tentative_output| < output_limit OR sign(error_outer) != sign(tentative_output):
             integral_outer[axis] = clamp(tentative_I_outer, -integral_limit, +integral_limit)
         // else: freeze integrator
-
-        // Derivative on measurement
-        D_outer = gains_kd_outer[axis] * (prev_angle[axis] - angle_measurement[axis]) / dt
-        prev_angle[axis] = angle_measurement[axis]
 
         // Sum and clamp
         output_outer = P_outer + integral_outer[axis] + D_outer

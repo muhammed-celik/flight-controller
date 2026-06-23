@@ -8,7 +8,10 @@ The failsafe module is the most safety-critical component in the flight controll
 - **Crash mitigation on signal loss**: Without failsafe, a drone that loses RC signal will maintain its last throttle command indefinitely, climbing uncontrollably or maintaining flight with no way to land.
 - **Protection of people and property**: A quadcopter spinning at 10,000+ RPM with carbon fiber propellers can cause serious injury. Motors must be immediately disabled when unsafe conditions are detected.
 - **Regulatory compliance**: Aviation regulations (FAA Part 107, EU drone regulations) require failsafe mechanisms that bring the drone down safely on link loss.
-- **IMU failure handling**: If the attitude estimation system fails (no gyroscope data), the PID controller will output garbage, causing violent oscillations. The motors must be cut immediately.
+- **IMU failure handling**: Loss of fresh gyroscope data invalidates the RTL
+  rate loop, so motors must be cut immediately. Loss of only the selected
+  attitude estimate disables attitude-dependent modes while fresh gyro rate
+  control remains usable.
 - **Accidental arming prevention**: Motors must never spin unintentionally. A strict set of pre-arm checks ensures the drone only arms when the pilot explicitly commands it with throttle at zero.
 
 **Design philosophy**: The failsafe module is the ultimate authority over motor outputs. No other module can override a failsafe disarm. The system fails safe — any ambiguous condition results in motors off.
@@ -38,7 +41,15 @@ Rationale:
 
 ## 3. Theoretical Foundations
 
-### 3.1 Failure Mode Analysis
+### 3.1 Estimator Freshness
+
+The estimator mux checks the selected source. RTL complementary-filter mode uses
+its local valid/sequence/timestamp signals; CPU EKF mode uses the committed AXI
+mailbox and its age watchdog. A stale or unhealthy estimate disables
+angle/heading-hold modes and clears the outer-loop integrators; it does not
+invalidate fresh gyro data used by the RTL rate loop.
+
+### 3.2 Failure Mode Analysis
 
 | Failure Mode | Detection Method | Response | Severity |
 |--------------|-----------------|----------|----------|
@@ -49,7 +60,7 @@ Rationale:
 | GPS loss | No GPS fix for N seconds | Return to manual mode | Medium |
 | Sensor saturation | IMU output at maximum | Warning flag | Low |
 
-### 3.2 Arming Requirements
+### 3.3 Arming Requirements
 
 ALL of the following conditions must be simultaneously true to allow arming:
 
@@ -76,7 +87,7 @@ ALL of the following conditions must be simultaneously true to allow arming:
    - Prevents arming with nearly-dead battery that would die mid-flight
    - Threshold configurable via AXI register
 
-### 3.3 Disarm Conditions
+### 3.4 Disarm Conditions
 
 ANY single condition triggers immediate disarm:
 
@@ -86,7 +97,7 @@ ANY single condition triggers immediate disarm:
 4. **Explicit disarm command**: Software writes to disarm register
 5. **Battery critical**: Voltage below emergency threshold (if enabled)
 
-### 3.4 Failsafe Descent Behavior
+### 3.5 Failsafe Descent Behavior
 
 When armed and RC signal is lost, a graduated response is used:
 
@@ -106,7 +117,7 @@ Time since RC loss:     Action:
                        has already reduced altitude significantly)
 ```
 
-### 3.5 Watchdog Timer Design
+### 3.6 Watchdog Timer Design
 
 At 100 MHz system clock:
 - 1 ms = 100,000 clock cycles (17-bit counter)
@@ -119,7 +130,7 @@ At 100 MHz system clock:
 
 When counter reaches threshold → corresponding timeout flag asserts.
 
-### 3.6 Motor Output Gating
+### 3.7 Motor Output Gating
 
 The motor gating is the absolute final stage before PWM/DShot outputs:
 
@@ -129,7 +140,7 @@ motor_output[i] = armed AND motor_enable ? pid_output[i] : 0
 
 This is implemented as a simple AND gate on each motor channel. When `armed = 0` or `motor_enable = 0`, all motor outputs are forced to zero regardless of what the PID controller produces. This provides a hardware guarantee that cannot be violated by software or upstream logic errors.
 
-### 3.7 State Transition Diagram
+### 3.8 State Transition Diagram
 
 ```
                     ┌─────────┐
@@ -158,7 +169,7 @@ This is implemented as a simple AND gate on each motor channel. When `armed = 0`
                     └─────────┘
 ```
 
-### 3.8 Pre-Arm vs In-Flight Checks
+### 3.9 Pre-Arm vs In-Flight Checks
 
 | Check | Pre-Arm Threshold | In-Flight Threshold | Rationale |
 |-------|-------------------|---------------------|-----------|
@@ -180,6 +191,7 @@ This is implemented as a simple AND gate on each motor channel. When `armed = 0`
 | rst_n | 1 | — | System | Active-low synchronous reset |
 | rc_valid | 1 | Pulse | RC Module | Pulses each time a valid RC frame is received (~50 Hz) |
 | imu_valid | 1 | Pulse | IMU Module | Pulses each time valid IMU data is produced (~1 kHz) |
+| estimator_valid | 1 | Level | Estimator mux | Selected RTL or CPU estimate is healthy and fresh |
 | arm_channel | 16 | Unsigned | RC Module | Arm switch channel value (0=disarm, 65535=arm) |
 | throttle_channel | 16 | Unsigned | RC Module | Throttle stick value (0=min, 65535=max) |
 | cal_done | 1 | Level | IMU Module | Gyroscope calibration complete flag |
@@ -202,7 +214,8 @@ This is implemented as a simple AND gate on each motor channel. When `armed = 0`
 | motor_enable | 1 | Level | Motor Mixer | Motors allowed to produce output (AND with armed) |
 | failsafe_active | 1 | Level | Status/LED | Any failsafe condition is active |
 | failsafe_state | 3 | Encoded | CPU/Status | Current state: 0=DISARMED, 1=ARMED, 2=COAST, 3=DESCEND, 4=ERROR |
-| error_flags | 8 | Bitfield | CPU/Status | Bit 0: RC timeout, Bit 1: IMU timeout, Bit 2: battery low, Bit 3: cal incomplete, Bit 4–7: reserved |
+| error_flags | 8 | Bitfield | CPU/Status | Bit 0: RC timeout, Bit 1: IMU timeout, Bit 2: battery low, Bit 3: cal incomplete, Bit 4: estimator stale, Bit 5–7: reserved |
+| attitude_mode_allowed | 1 | Level | Mode/control logic | High only when `estimator_valid` and other checks pass |
 | throttle_override | 16 | Unsigned | Motor Mixer | Overridden throttle during failsafe descent (replaces pilot throttle) |
 | throttle_override_valid | 1 | Level | Motor Mixer | When high, use throttle_override instead of RC throttle |
 | rc_watchdog_count | 26 | Unsigned | Debug/Status | Current RC watchdog counter value (for diagnostics) |
@@ -343,7 +356,8 @@ On every clock rising edge:
   error_flags[1] = (imu_watchdog >= cfg_imu_timeout)       // IMU timeout
   error_flags[2] = battery_valid AND (battery_voltage < cfg_battery_min_fly)  // Battery low
   error_flags[3] = NOT cal_done                             // Calibration incomplete
-  // Bits 4-7 reserved for future use
+  error_flags[4] = NOT estimator_valid                      // Selected estimator stale/unhealthy
+  // Bits 5-7 reserved for future use
 ```
 
 ### 5.4 Motor Output Gating Logic
