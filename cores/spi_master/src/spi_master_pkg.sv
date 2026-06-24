@@ -9,10 +9,10 @@ package spi_master_pkg;
   localparam int unsigned SCLK_FREQ_2 = 5_000_000;
   localparam int unsigned SCLK_FREQ_3 = 10_000_000;
 
-  localparam int unsigned SCLK_FREQ_0_LIM = SYS_CLK_FREQ/SCLK_FREQ_0;
-  localparam int unsigned SCLK_FREQ_1_LIM = SYS_CLK_FREQ/SCLK_FREQ_1;
-  localparam int unsigned SCLK_FREQ_2_LIM = SYS_CLK_FREQ/SCLK_FREQ_2;
-  localparam int unsigned SCLK_FREQ_3_LIM = SYS_CLK_FREQ/SCLK_FREQ_3;
+  localparam int unsigned SCLK_FREQ_0_LIM = SYS_CLK_FREQ/(2*SCLK_FREQ_0);
+  localparam int unsigned SCLK_FREQ_1_LIM = SYS_CLK_FREQ/(2*SCLK_FREQ_1);
+  localparam int unsigned SCLK_FREQ_2_LIM = SYS_CLK_FREQ/(2*SCLK_FREQ_2);
+  localparam int unsigned SCLK_FREQ_3_LIM = SYS_CLK_FREQ/(2*SCLK_FREQ_3);
 
   localparam int unsigned SEL_MPU9250 = 0;
   localparam int unsigned SEL_BMP280  = 1;
