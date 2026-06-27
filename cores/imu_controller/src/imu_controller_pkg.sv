@@ -1,10 +1,10 @@
 package imu_controller_pkg;
   // Define the MPU9250 Register Addresses
-  localparam bit [6:0] MPU9250_WHO_AM_I = 7'h75;
-  localparam bit [6:0] MPU9250_CFG_BASE = 7'h19;
-  localparam bit [6:0] MPU9250_SENSOR_DATA_BASE = 7'h3B;
-  localparam bit [6:0] MPU9250_GYRO_OFFSET_BASE = 7'h13;
-  localparam bit [6:0] MPU9250_ACCEL_OFFSET_BASE = 7'h77;
+  localparam bit [6:0] MPU9250_WHO_AM_I_ADDR = 7'h75;
+  localparam bit [6:0] MPU9250_CFG_BASE_ADDR = 7'h19;
+  localparam bit [6:0] MPU9250_SENSOR_DATA_BASE_ADDR = 7'h3B;
+  localparam bit [6:0] MPU9250_GYRO_OFFSET_BASE_ADDR = 7'h13;
+  localparam bit [6:0] MPU9250_ACCEL_OFFSET_BASE_ADDR = 7'h77;
 
   // Define the MPU9250 Register Data
   localparam bit [7:0] MPU9250_WHO_AM_I_DATA = 8'h71; // Expected WHO_AM_I response for MPU9250
@@ -15,11 +15,11 @@ package imu_controller_pkg;
   localparam bit [7:0] MPU9250_ACCEL_CONFIG2_DATA = 8'h00; // Accelerometer Configuration 2 Register
 
   // Define the BMP280 Register Addresses
-  localparam bit [6:0] BMP280_CHIP_ID = 7'h50;
-  localparam bit [6:0] BMP280_RESET = 7'h60;
-  localparam bit [6:0] BMP280_CTRL_MEAS = 7'h74;
-  localparam bit [6:0] BMP280_CONFIG = 7'h75;
-  localparam bit [6:0] BMP280_DATA_BASE = 7'h77;
+  localparam bit [6:0] BMP280_CHIP_ID_ADDR = 7'h50;
+  localparam bit [6:0] BMP280_RESET_ADDR = 7'h60;
+  localparam bit [6:0] BMP280_CTRL_MEAS_ADDR = 7'h74;
+  localparam bit [6:0] BMP280_CONFIG_ADDR = 7'h75;
+  localparam bit [6:0] BMP280_DATA_BASE_ADDR = 7'h77;
 
   // Define the BMP280 Register Data
   localparam bit [7:0] BMP280_CHIP_ID_DATA = 8'h58; // Expected CHIP_ID response for BMP280

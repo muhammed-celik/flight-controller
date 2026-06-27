@@ -33,7 +33,7 @@ being a limiting factor.
 | Calibration | ~100 ns | — | Nothing (passthrough) |
 | IIR filter | Measured/tuned | Configurable | Rate-loop input bandwidth |
 | RTL complementary filter | Bounded RTL latency | 500 Hz target | Outer-loop attitude in RTL mode |
-| Optional CPU EKF | Must finish before mailbox deadline | 500 Hz target | Outer-loop attitude in EKF mode |
+| Optional CPU EKF | Must finish before mailbox deadline | 500 Hz target | Later outer-loop attitude in EKF mode |
 | RTL PID computation | ~1 µs target | — | Negligible after RTL verification |
 | Motor mixer | ~50 ns | — | Nothing (computation) |
 | DSHOT600 frame TX | 26.7 µs | 37 kHz max rate | ESC command rate |
@@ -280,12 +280,13 @@ Switch to triblade for more thrust once control loop is tuned.
 | Calibration + PT1 + rate PID + mixer | <10 µs target | RTL datapath |
 | DSHOT600 frame transmission | 26.7 µs | RTL output engine |
 | Complementary filter + CORDIC | Profile after RTL implementation | RTL estimator |
-| AXI snapshot + EKF + mailbox | <1 ms target when enabled | CPU software |
+| AXI snapshot + EKF + mailbox | <1 ms target when enabled later | CPU software |
 
-I²C bus occupancy and both estimator implementations must be measured on the
-selected FPGA and exact GY-91 board. In EKF mode, execution also depends on CPU
-configuration and compiler options. The selected estimator has a freshness
-watchdog, while the RTL rate loop remains independent of either attitude path.
+I²C bus occupancy and the RTL estimator implementation must be measured on the
+selected FPGA and exact GY-91 board for first flight. EKF measurements are a
+later CPU milestone and also depend on CPU configuration and compiler options.
+The selected estimator has a freshness watchdog, while the RTL rate loop remains
+independent of either attitude path.
 
 ### 7.2 Latency Budget (Sensor Event to Motor Response)
 
@@ -297,10 +298,11 @@ watchdog, while the RTL rate loop remains independent of either attitude path.
 | DSHOT frame completes | +0.0267 ms |
 | ESC processing and motor-current response | Device dependent |
 
-The rate path does not wait for either attitude estimator. Complementary mode
-stays within RTL; EKF mode additionally includes AXI transfer and software
-execution. Both have separate validity/freshness monitoring. Final latency
-claims require logic-analyzer and software profiling measurements.
+The rate path does not wait for either attitude estimator. First-flight
+complementary mode stays within RTL; later EKF mode additionally includes AXI
+transfer and software execution. Both have separate validity/freshness
+monitoring. Final latency claims require logic-analyzer measurements, plus
+software profiling once the CPU exists.
 
 ---
 
@@ -334,7 +336,9 @@ Once basic flight is achieved:
 1. Switch to BLHeli_32 ESCs (enable RPM telemetry)
 2. Add RPM-based notch filter (removes motor-frequency vibration)
 3. Try triblade props (more thrust, test if vibration is acceptable)
-4. Tune PID gains with Blackbox logging (from MicroBlaze or RV32 CPU)
-5. Enable altitude hold (barometer feedback)
-6. Enable heading hold (magnetometer feedback)
+4. Add optional AXI telemetry/logging through MicroBlaze or RV32 CPU
+5. Tune PID gains with logged flight data
+6. Enable altitude hold (barometer feedback)
+7. Enable heading hold (magnetometer feedback)
+8. Enable CPU EKF when the RTL baseline is stable
 ```

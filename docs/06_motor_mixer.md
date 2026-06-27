@@ -159,9 +159,14 @@ For PWM (1000-2000 µs):
 | `pitch_cmd` | 32 | Q16.16 | PID Controller | Pitch torque demand (signed) |
 | `yaw_cmd` | 32 | Q16.16 | PID Controller | Yaw torque demand (signed) |
 | `armed` | 1 | — | Control Logic | Motor enable (0 = all outputs forced to 0) |
-| `idle_speed` | 11 | Unsigned | AXI Regs | Minimum motor output when armed (default 48) |
-| `max_throttle` | 11 | Unsigned | AXI Regs | Maximum motor output (default 2047) |
-| `output_mode` | 1 | — | AXI Regs | 0 = DSHOT (0-2047), 1 = PWM (1000-2000) |
+| `idle_speed` | 11 | Unsigned | RTL default/optional AXI | Minimum motor output when armed, default 48 |
+| `max_throttle` | 11 | Unsigned | RTL default/optional AXI | Maximum motor output, default 2047 |
+| `output_mode` | 1 | — | RTL default/optional AXI | 0 = DSHOT, 1 = PWM |
+
+The first RTL build uses fixed X-quad mixing and synthesized defaults for idle
+speed, maximum throttle, and output mode. Optional AXI overrides are for later
+tuning and ESC compatibility; no CPU configuration is required for the default
+DSHOT path.
 
 ### 4.3 Output Signals
 

@@ -191,15 +191,15 @@ y[n] = b0×x[n] + b1×x[n-1] + b2×x[n-2] - a1×y[n-1] - a2×y[n-2]
 | cal_accel_x/y/z | 32    | Q16.16 signed   | Calibration  | Calibrated acceleration          |
 | cal_gyro_x/y/z  | 32    | Q16.16 signed   | Calibration  | Calibrated angular rate          |
 | cal_valid        | 1     | Pulse           | Calibration  | New calibrated data available    |
-| alpha_gyro       | 32    | Q16.16 unsigned | CPU (AXI)    | Gyro filter coefficient          |
-| alpha_accel      | 32    | Q16.16 unsigned | CPU (AXI)    | Accel filter coefficient         |
+| alpha_gyro       | 32    | Q16.16 unsigned | RTL parameter/optional AXI | Gyro filter coefficient |
+| alpha_accel      | 32    | Q16.16 unsigned | RTL parameter/optional AXI | Accel filter coefficient |
 
 ### 4.2 Outputs
 
 | Signal           | Width | Format          | Dest             | Description                    |
 |------------------|-------|-----------------|------------------|--------------------------------|
-| filt_accel_x/y/z | 32    | Q16.16 signed   | RTL estimator/AXI | Filtered acceleration for complementary filter or CPU |
-| filt_gyro_x/y/z  | 32    | Q16.16 signed   | RTL PID/AXI      | Filtered angular rate          |
+| filt_accel_x/y/z | 32    | Q16.16 signed   | RTL estimator/optional AXI | Filtered acceleration |
+| filt_gyro_x/y/z  | 32    | Q16.16 signed   | RTL PID/optional AXI | Filtered angular rate |
 | filt_valid        | 1     | Pulse           | Next stage       | Filtered data ready            |
 
 ### 4.3 Configuration
@@ -210,10 +210,14 @@ y[n] = b0×x[n] + b1×x[n-1] + b2×x[n-2] - a1×y[n-1] - a2×y[n-2]
 | alpha_accel | 32    | 0x00002066     | Accel filter α (default fc=20 Hz)         |
 | filter_en   | 1     | 1              | Enable filter (0=passthrough for debug)   |
 
+These are RTL parameters with reset defaults in the first build. Optional AXI
+registers may override them later, but no CPU write is required before flight.
+
 Note: Gyro and accel have different cutoff frequencies because:
 - Gyro feeds rate PID (needs higher bandwidth, 80 Hz)
-- Accel feeds either the RTL complementary filter or CPU EKF; its cutoff must
-  preserve estimator dynamics rather than assuming it is gravity-only
+- Accel feeds the first-flight RTL complementary filter and later may also feed
+  the CPU EKF; its cutoff must preserve estimator dynamics rather than assuming
+  it is gravity-only
 
 ---
 
@@ -255,10 +259,10 @@ ON cal_valid:
     ASSERT filt_valid = 1 (single-cycle pulse)
 ```
 
-### 5.2 Coefficient Pre-Computation (CPU, at boot or on parameter change)
+### 5.2 Coefficient Pre-Computation (offline or CPU later)
 
 ```
-// Called when user changes filter cutoff frequency
+// Used offline for RTL parameters, or later when firmware changes a cutoff
 FUNCTION compute_alpha(fc_hz, fs_hz) → Q16.16:
     dt = 1.0 / fs_hz
     rc = 1.0 / (2π × fc_hz)
@@ -267,6 +271,10 @@ FUNCTION compute_alpha(fc_hz, fs_hz) → Q16.16:
 
 // Example: compute_alpha(80, 1000) → 0x000055A4
 ```
+
+The first RTL build hardcodes the selected Q16.16 coefficients as parameters.
+Later CPU firmware can run the same calculation and write override registers
+when tuning is enabled.
 
 ### 5.3 Initialization (First Sample Handling)
 
@@ -315,8 +323,9 @@ No precision concerns with Q16.16 for this filter.
 
 ## 7. Frequency Response Verification
 
-To verify the filter works correctly, the CPU can inject a known-frequency
-signal and measure attenuation:
+To verify the filter works correctly, a testbench should inject a known-frequency
+signal and measure attenuation. Later CPU firmware may provide an additional
+hardware-in-the-loop injection path:
 
 | Input freq (Hz) | Expected output (dB) | α = 0.3345 (fc=80 Hz) |
 |-----------------|---------------------|------------------------|
@@ -336,6 +345,6 @@ signal and measure attenuation:
 | LUTs           | ~120   | Subtractors, adders, muxes                   |
 | DSP48E1        | 2      | Time-muxed for 6 multiplications             |
 | Block RAM      | 0      | States fit in registers                      |
-| AXI registers  | 3      | alpha_gyro, alpha_accel, filter_en           |
+| Optional AXI registers | 3 | alpha_gyro, alpha_accel, filter_en overrides |
 
 **Total latency:** ~6–10 clock cycles (60–100 ns) — negligible.

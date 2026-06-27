@@ -5,9 +5,12 @@
 The selected barometer is the **BMP280 already present on the GY-91 module**.
 No separate BMP390 is used.
 
-RTL schedules raw BMP280 transactions and publishes coherent ADC values and
-factory coefficients through AXI4-Lite. CPU software performs Bosch compensation,
-pressure-to-altitude conversion, and any vertical-state filtering or EKF update.
+RTL schedules raw BMP280 transactions, validates identity, and retains coherent
+ADC values plus factory coefficients. The barometer is not required for
+first-flight manual rate/attitude control. When a CPU is added, software
+performs Bosch compensation, pressure-to-altitude conversion, and any
+vertical-state filtering or EKF update. A future RTL altitude-hold extension may
+also consume the raw/coefficient data.
 
 ## 2. Interface and Identification
 
@@ -59,8 +62,8 @@ Suggested logical client: `bmp280_client`, using the shared `gy91_i2c_master`.
 | `baro_error` | 1 | Sticky NACK/timeout/identity fault |
 
 At initialization RTL reads and retains all calibration bytes. They are exposed
-read-only over AXI4-Lite with the correct signedness: `dig_T1`, `dig_P1` are
-unsigned; the remaining coefficients are signed 16-bit values.
+to optional AXI with the correct signedness: `dig_T1`, `dig_P1` are unsigned;
+the remaining coefficients are signed 16-bit values.
 
 ## 5. Initialization and Acquisition
 
@@ -75,12 +78,13 @@ unsigned; the remaining coefficients are signed 16-bit values.
    baro_valid.
 ```
 
-## 6. CPU Compensation and Altitude
+## 6. Future CPU Compensation and Altitude
 
-CPU software implements the BMP280 datasheet compensation algorithm exactly,
-including its wide intermediate values. The result is compensated temperature
-and pressure in Pa. Do not substitute BMP390 coefficients or formulas; the two
-devices have different calibration models and register maps.
+When enabled later, CPU software implements the BMP280 datasheet compensation
+algorithm exactly, including its wide intermediate values. The result is
+compensated temperature and pressure in Pa. Do not substitute BMP390
+coefficients or formulas; the two devices have different calibration models and
+register maps.
 
 An approximate altitude relative to reference pressure `p0` is
 
@@ -96,15 +100,16 @@ use it.
 
 ## 7. AXI4-Lite and Error Handling
 
-The CPU-visible sensor snapshot includes raw pressure/temperature, timestamp,
-sequence, valid/stale status, and calibration coefficients. AXI configuration
-fields select oversampling, IIR, output rate, and enable state.
+When AXI support is included, the CPU-visible sensor snapshot includes raw
+pressure/temperature, timestamp, sequence, valid/stale status, and calibration
+coefficients. RTL reset defaults select oversampling, IIR, output rate, and
+enable state; optional AXI fields may override them later.
 
 | Failure | Response |
 |---|---|
 | Both addresses NACK | Mark barometer absent; inhibit altitude-hold mode |
 | Wrong chip ID | Set sticky identity fault; do not apply BMP280 formulas |
-| Stale sample | CPU skips pressure update; RTL reports age |
+| Stale sample | RTL reports age; future CPU skips pressure update |
 | Bus timeout | Recover shared bus and retry at next barometer slot |
 | Invalid coefficient block | Disable compensation and report configuration fault |
 

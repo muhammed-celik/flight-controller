@@ -2,7 +2,9 @@
 
 ## 1. Supported Approaches
 
-The design deliberately supports two attitude-estimation implementations:
+The design supports two attitude-estimation implementations, but the first
+implementation is the RTL complementary filter. The CPU EKF is a later upgrade
+and must not be required for manual rate/attitude flight.
 
 | Approach | Location | Advantages | Limitations |
 |---|---|---|---|
@@ -10,8 +12,7 @@ The design deliberately supports two attitude-estimation implementations:
 | Extended Kalman filter | MicroBlaze/RV32 software | Bias estimation, gating, flexible multi-sensor fusion | More software and CPU cost; must meet mailbox deadline |
 
 The **RTL complementary filter is a valid final implementation**, not merely a
-temporary placeholder. The CPU EKF is an optional upgrade. Both leave the inner
-angular-rate PID in RTL.
+temporary placeholder. Both approaches leave the inner angular-rate PID in RTL.
 
 ## 2. Common Estimator Contract
 
@@ -51,9 +52,9 @@ pitch = alpha * (pitch_prev + gyro_y * dt) + (1-alpha) * pitch_acc
 yaw   = wrap(yaw_prev + gyro_z * dt)
 ```
 
-For a first implementation, `alpha` is configurable over AXI4-Lite and computed
-from a chosen correction time constant. `dt` is derived from the RTL sample
-timestamp/tick rather than assumed implicitly.
+For the first implementation, `alpha` is an RTL parameter with a conservative
+reset/default value. Optional AXI may override it later. `dt` is derived from
+the RTL sample timestamp/tick rather than assumed implicitly.
 
 These independent-axis equations are an approximation. They are acceptable for
 initial moderate-angle flight; a quaternion complementary implementation is the
@@ -68,9 +69,10 @@ by gravity. RTL shall reduce or skip correction when
 abs(norm(accel) - 1 g) > accel_gate
 ```
 
-The inexpensive implementation may compare squared magnitude against configured
-bounds and avoid a square root. This prevents strong translational acceleration
-from being interpreted immediately as tilt.
+The inexpensive implementation may compare squared magnitude against RTL
+parameter bounds and avoid a square root. Optional AXI overrides can tune the
+bounds later. This prevents strong translational acceleration from being
+interpreted immediately as tilt.
 
 ### 3.3 CORDIC
 
@@ -89,9 +91,10 @@ interference handling must be implemented before claiming absolute heading.
 ### 3.5 RTL interface
 
 Inputs are calibrated/filtered accel and gyro samples plus `imu_valid`, `dt`,
-`alpha`, acceleration-gate thresholds, enable, and reset/reinitialize controls.
-Outputs are the common estimator record and diagnostic flags. The filter becomes
-valid only after stationary initialization and consecutive plausible samples.
+RTL-default/optional-AXI `alpha`, acceleration-gate thresholds, enable, and
+reset/reinitialize controls. Outputs are the common estimator record and
+diagnostic flags. The filter becomes valid only after stationary initialization
+and consecutive plausible samples.
 
 ## 4. Option B: CPU Extended Kalman Filter
 
@@ -123,11 +126,10 @@ the RTL rate loop continues and attitude-dependent modes are inhibited.
 
 ## 5. Selection Guidance
 
-Start with the RTL complementary filter when the goal is the smallest
-self-contained flight controller and straightforward bring-up. Select the CPU
-EKF when logs show that bias estimation, magnetic gating, covariance-based
-measurement rejection, or navigation-state fusion materially improves the
-vehicle.
+Start with the RTL complementary filter because the first milestone is a
+self-contained flight controller. Select the CPU EKF later when logs show that
+bias estimation, magnetic gating, covariance-based measurement rejection, or
+navigation-state fusion materially improves the vehicle.
 
 Keep both implementations behind the common estimator contract. This makes the
 decision a configuration/build choice rather than a redesign of PID, mixer,

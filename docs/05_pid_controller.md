@@ -135,14 +135,14 @@ All values use signed Q16.16 (32-bit):
 | `attitude_valid` | 1 | — | Estimator mux | Selected estimate is healthy and fresh |
 | `rate_setpoint_direct[2:0]` | 3×32 | Q16.16 | RC command mapper | Rate-mode fallback command |
 | `rate_measurement[2:0]` | 3×32 | Q16.16 | IMU Filter | Filtered gyroscope angular rates (rad/s) |
-| `gains_kp_outer[2:0]` | 3×32 | Q16.16 | AXI Regs | Proportional gain, outer loop (per axis) |
-| `gains_ki_outer[2:0]` | 3×32 | Q16.16 | AXI Regs | Integral gain, outer loop (per axis) |
-| `gains_kd_outer[2:0]` | 3×32 | Q16.16 | AXI Regs | Derivative gain, outer loop (per axis) |
-| `gains_kp_inner[2:0]` | 3×32 | Q16.16 | AXI Regs | Proportional gain, inner loop (per axis) |
-| `gains_ki_inner[2:0]` | 3×32 | Q16.16 | AXI Regs | Integral gain, inner loop (per axis) |
-| `gains_kd_inner[2:0]` | 3×32 | Q16.16 | AXI Regs | Derivative gain, inner loop (per axis) |
-| `output_limit` | 32 | Q16.16 | AXI Regs | Maximum output magnitude |
-| `integral_limit` | 32 | Q16.16 | AXI Regs | Maximum integrator magnitude |
+| `gains_kp_outer[2:0]` | 3×32 | Q16.16 | RTL defaults/optional AXI | Proportional gain, outer loop |
+| `gains_ki_outer[2:0]` | 3×32 | Q16.16 | RTL defaults/optional AXI | Integral gain, outer loop |
+| `gains_kd_outer[2:0]` | 3×32 | Q16.16 | RTL defaults/optional AXI | Derivative gain, outer loop |
+| `gains_kp_inner[2:0]` | 3×32 | Q16.16 | RTL defaults/optional AXI | Proportional gain, inner loop |
+| `gains_ki_inner[2:0]` | 3×32 | Q16.16 | RTL defaults/optional AXI | Integral gain, inner loop |
+| `gains_kd_inner[2:0]` | 3×32 | Q16.16 | RTL defaults/optional AXI | Derivative gain, inner loop |
+| `output_limit` | 32 | Q16.16 | RTL default/optional AXI | Maximum output magnitude |
+| `integral_limit` | 32 | Q16.16 | RTL default/optional AXI | Maximum integrator magnitude |
 | `armed` | 1 | — | Control | When deasserted, all outputs = 0, integrals cleared |
 
 ### 4.3 Output Signals
@@ -156,6 +156,10 @@ All values use signed Q16.16 (32-bit):
 If `attitude_valid` is false, the outer loop is disabled and its integrators are
 cleared. The inner rate loop remains available for a configured rate-mode
 fallback. Hard failsafe logic may still disarm for independent critical faults.
+
+First-flight builds use conservative synthesized gain and limit parameters.
+Optional AXI registers may override them later for tuning, but reset values must
+produce a bounded, usable controller without CPU initialization.
 
 ---
 

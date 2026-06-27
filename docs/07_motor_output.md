@@ -158,8 +158,12 @@ Values 0–47 are reserved as special commands (not throttle):
 | `motor_value[3:0]` | 4×11 | Unsigned | Motor Mixer | Throttle values (0–2047) per motor |
 | `telemetry_req[3:0]` | 4 | — | Control | Per-motor telemetry request bit |
 | `send_frame` | 1 | Pulse | Timing Gen | Trigger: begin transmitting new frame to all 4 ESCs |
-| `output_mode` | 1 | — | AXI Regs | 0 = DSHOT600, 1 = PWM |
+| `output_mode` | 1 | — | RTL default/optional AXI | 0 = DSHOT600, 1 = PWM |
 | `armed` | 1 | — | Control | When deasserted, output value 0 (disarm command) |
+
+The reset/default output mode is DSHOT600 for the first RTL build. Optional AXI
+may select PWM later for legacy ESC testing, but DSHOT operation must not depend
+on firmware initialization.
 
 ### 4.3 Output Signals
 

@@ -34,7 +34,8 @@ Rationale:
 - Runs in dedicated hardware, independent of any software — cannot crash or hang
 - Sub-microsecond response time to fault conditions
 - Deterministic timing guaranteed by synthesized logic
-- All timeout thresholds configurable via AXI registers (updatable without resynthesis)
+- Timeout thresholds have RTL reset/default parameters; optional AXI overrides
+  may update them later without resynthesis
 - Motor gating is the final output stage — physically impossible for any other logic to bypass
 
 ---
@@ -85,7 +86,7 @@ ALL of the following conditions must be simultaneously true to allow arming:
 
 5. **Battery voltage above minimum** (if battery monitoring enabled)
    - Prevents arming with nearly-dead battery that would die mid-flight
-   - Threshold configurable via AXI register
+   - Threshold has an RTL default and optional AXI override
 
 ### 3.4 Disarm Conditions
 
@@ -94,7 +95,7 @@ ANY single condition triggers immediate disarm:
 1. **Arm switch deactivated**: arm_channel drops below threshold
 2. **RC failsafe timeout**: rc_valid absent for > 500 ms (configurable)
 3. **IMU data timeout**: imu_valid absent for > 50 ms (configurable)
-4. **Explicit disarm command**: Software writes to disarm register
+4. **Explicit disarm command**: optional CPU/AXI disarm pulse, when present
 5. **Battery critical**: Voltage below emergency threshold (if enabled)
 
 ### 3.5 Failsafe Descent Behavior
@@ -197,14 +198,14 @@ This is implemented as a simple AND gate on each motor channel. When `armed = 0`
 | cal_done | 1 | Level | IMU Module | Gyroscope calibration complete flag |
 | battery_voltage | 12 | Unsigned | ADC Module | Battery voltage (scaled, optional) |
 | battery_valid | 1 | Level | ADC Module | Battery monitoring is active and reading valid |
-| sw_disarm | 1 | Pulse | CPU/AXI | Software-initiated disarm command |
-| cfg_rc_timeout_coast | 26 | Unsigned | AXI Config | RC loss coast duration in clock cycles (default: 50M = 500ms) |
-| cfg_rc_timeout_descend | 29 | Unsigned | AXI Config | RC loss descend duration in clock cycles (default: 300M = 3s) |
-| cfg_imu_timeout | 23 | Unsigned | AXI Config | IMU timeout threshold in clock cycles (default: 5M = 50ms) |
-| cfg_throttle_min | 16 | Unsigned | AXI Config | Maximum throttle for arming (default: 0x0CCC ≈ 5%) |
-| cfg_arm_threshold | 16 | Unsigned | AXI Config | Minimum arm channel value to consider armed (default: 0x7FFF) |
-| cfg_battery_min_arm | 12 | Unsigned | AXI Config | Minimum battery voltage for arming |
-| cfg_battery_min_fly | 12 | Unsigned | AXI Config | Minimum battery voltage in flight |
+| sw_disarm | 1 | Pulse | Optional CPU/AXI | Software-initiated disarm command, tie low in RTL-only build |
+| cfg_rc_timeout_coast | 26 | Unsigned | RTL default/optional AXI | RC loss coast duration, default 50M = 500ms |
+| cfg_rc_timeout_descend | 29 | Unsigned | RTL default/optional AXI | RC loss descend duration, default 300M = 3s |
+| cfg_imu_timeout | 23 | Unsigned | RTL default/optional AXI | IMU timeout threshold, default 5M = 50ms |
+| cfg_throttle_min | 16 | Unsigned | RTL default/optional AXI | Maximum throttle for arming, default approx 5% |
+| cfg_arm_threshold | 16 | Unsigned | RTL default/optional AXI | Minimum arm channel value to consider armed |
+| cfg_battery_min_arm | 12 | Unsigned | RTL default/optional AXI | Minimum battery voltage for arming |
+| cfg_battery_min_fly | 12 | Unsigned | RTL default/optional AXI | Minimum battery voltage in flight |
 
 ### 4.2 Output Signals
 
@@ -213,8 +214,8 @@ This is implemented as a simple AND gate on each motor channel. When `armed = 0`
 | armed | 1 | Level | All Modules | Drone is armed — motors may spin |
 | motor_enable | 1 | Level | Motor Mixer | Motors allowed to produce output (AND with armed) |
 | failsafe_active | 1 | Level | Status/LED | Any failsafe condition is active |
-| failsafe_state | 3 | Encoded | CPU/Status | Current state: 0=DISARMED, 1=ARMED, 2=COAST, 3=DESCEND, 4=ERROR |
-| error_flags | 8 | Bitfield | CPU/Status | Bit 0: RC timeout, Bit 1: IMU timeout, Bit 2: battery low, Bit 3: cal incomplete, Bit 4: estimator stale, Bit 5–7: reserved |
+| failsafe_state | 3 | Encoded | Status/optional CPU | Current state: 0=DISARMED, 1=ARMED, 2=COAST, 3=DESCEND, 4=ERROR |
+| error_flags | 8 | Bitfield | Status/optional CPU | Bit 0: RC timeout, Bit 1: IMU timeout, Bit 2: battery low, Bit 3: cal incomplete, Bit 4: estimator stale, Bit 5-7: reserved |
 | attitude_mode_allowed | 1 | Level | Mode/control logic | High only when `estimator_valid` and other checks pass |
 | throttle_override | 16 | Unsigned | Motor Mixer | Overridden throttle during failsafe descent (replaces pilot throttle) |
 | throttle_override_valid | 1 | Level | Motor Mixer | When high, use throttle_override instead of RC throttle |
@@ -350,7 +351,7 @@ On every clock rising edge:
 ### 5.3 Error Flag Generation
 
 ```
-// Error flags are set by conditions, cleared by reset or software clear
+// Error flags are set by conditions, cleared by reset or optional software clear
 On every clock rising edge:
   error_flags[0] = (rc_watchdog >= cfg_rc_timeout_coast)   // RC timeout
   error_flags[1] = (imu_watchdog >= cfg_imu_timeout)       // IMU timeout
@@ -418,7 +419,7 @@ On every clock rising edge:
 - Arming condition logic (5 comparators): ~30 LUTs, ~5 FFs
 - Error flag generation: ~10 LUTs, ~8 FFs
 - Motor gating (4 channels): ~8 LUTs, ~0 FFs (combinational)
-- Configuration register interface: ~10 LUTs, ~8 FFs
+- Optional configuration register interface: ~10 LUTs, ~8 FFs
 - Debounce counter: ~10 LUTs, ~16 FFs
 
 **Critical path note**: The arming logic has multiple comparators that must resolve within one clock cycle. At 100 MHz (10 ns period), 16-bit comparisons easily fit within timing. No special pipelining is required for this module.

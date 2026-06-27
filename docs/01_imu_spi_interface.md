@@ -15,7 +15,9 @@ Together these provide ten measured quantities: acceleration (3), angular rate
 (3), magnetic field (3), and pressure (1), plus sensor temperatures. The GY-91
 variant used by this project is the eight-pin board shown in the
 [Electropeak GY-91 guide](https://electropeak.com/learn/interfacing-gy-91-9-axis-mpu9250-bmp280-module-with-arduino/).
-Firmware and RTL must still verify each device independently at startup.
+RTL must verify each required device independently at startup. Later firmware
+may repeat the checks for diagnostics, but first-flight sensor bring-up is not
+CPU-dependent.
 
 ### 1.1 Exact breakout pinout
 
@@ -53,8 +55,9 @@ Expected 7-bit addresses are:
 
 `SA0/SDO` selects the address strap; the resulting MPU9250 and BMP280 addresses
 must be confirmed with an address scan during bring-up. Address values remain
-configurable/discovered at startup so clone or assembly differences fail
-cleanly rather than being mistaken for valid sensors.
+configurable/discovered by the RTL startup sequence so clone or assembly
+differences fail cleanly rather than being mistaken for valid sensors. AXI
+address overrides may be added later for bring-up convenience.
 
 ### 2.2 Optional SPI mode
 
@@ -107,9 +110,9 @@ accel_g    = accel_raw / 2048
 temp_C     = temp_raw / 333.87 + 21
 ```
 
-RTL may expose raw signed samples to the CPU and separately provide calibrated
-Q16.16 values to the RTL controller. Keeping raw values in the AXI snapshot is
-important for estimator tuning, calibration, and logging.
+RTL converts the raw signed samples into Q16.16 values for the calibration and
+control datapath. Raw values are also retained for optional AXI snapshots,
+estimator tuning, calibration review, and logging when a CPU is added.
 
 ## 4. RTL Module Interface
 
@@ -132,24 +135,24 @@ SCL or SDA high.
 
 | Signal | Format | Consumer |
 |---|---|---|
-| `accel_raw[2:0]` | 3 x signed 16-bit | AXI snapshot/calibration |
-| `gyro_raw[2:0]` | 3 x signed 16-bit | AXI snapshot/calibration |
-| `imu_temp_raw` | signed 16-bit | AXI snapshot |
+| `accel_raw[2:0]` | 3 x signed 16-bit | RTL conversion/calibration and optional AXI snapshot |
+| `gyro_raw[2:0]` | 3 x signed 16-bit | RTL conversion/calibration and optional AXI snapshot |
+| `imu_temp_raw` | signed 16-bit | Calibration diagnostics and optional AXI snapshot |
 | `imu_valid` | one-cycle pulse | filter, watchdog, snapshot logic |
-| `sample_seq` | unsigned 32-bit | CPU frame-loss detection |
+| `sample_seq` | unsigned 32-bit | RTL freshness checks and optional CPU frame-loss detection |
 | `sample_timestamp` | unsigned 64-bit | Estimator time step and logging |
-| `sensor_error` | bit field | CPU and failsafe |
+| `sensor_error` | bit field | RTL failsafe and optional CPU status |
 
 Magnetometer and barometer payloads are specified in Modules 10 and 09. All
 three clients share one I²C byte engine and an RTL transaction scheduler.
 
-## 5. AXI4-Lite Snapshot
+## 5. Optional AXI4-Lite Snapshot
 
-When `imu_valid` occurs, RTL copies the entire IMU frame into shadow registers,
-increments `sample_seq`, records a free-running timestamp, and raises an
-interrupt status bit. The CPU reads the shadow frame and acknowledges the
-interrupt. The next acquisition may update the live datapath without tearing
-the CPU-visible frame.
+When AXI support is included and `imu_valid` occurs, RTL copies the entire IMU
+frame into shadow registers, increments `sample_seq`, records a free-running
+timestamp, and raises an interrupt status bit. The CPU reads the shadow frame
+and acknowledges the interrupt. The next acquisition may update the live
+datapath without tearing the CPU-visible frame.
 
 At minimum the snapshot contains raw accel, gyro, IMU temperature, latest mag,
 latest pressure/temperature, per-sensor validity/age, sequence, and timestamp.
@@ -164,7 +167,8 @@ latest pressure/temperature, per-sensor validity/age, sequence, and timestamp.
 5. Configure and start the deterministic RTL polling scheduler.
 6. Initialize AK8963 and read its sensitivity-adjustment values.
 7. Initialize BMP280 and read all factory compensation coefficients.
-8. Take stationary samples; CPU calculates boot-time bias.
+8. Take stationary samples; RTL calculates boot-time gyro bias and sets
+   `cal_done` only if stationary checks pass.
 9. Mark the sensor subsystem ready only when required identities and data
    freshness checks pass.
 ```
@@ -184,10 +188,11 @@ magnetometer and pressure updates are much slower.
 | I²C bus held low | Time out, release bus, attempt bus recovery |
 | New trigger while busy | Count overrun; preserve last coherent sample |
 | IMU sample stale | Assert watchdog fault and inhibit arming |
-| Mag/baro sample stale | Mark measurement invalid for estimator/CPU |
+| Mag/baro sample stale | Mark measurement invalid for optional heading/altitude use |
 
 ## 8. Resource Direction
 
 Use one shared I²C byte engine, a transaction scheduler, and small register
-buffers. Attitude math belongs to Module 04; pressure compensation and EKF
-matrix arithmetic, when enabled, belong to the CPU.
+buffers. First-flight attitude math belongs to Module 04 RTL. Pressure
+compensation and EKF matrix arithmetic, when enabled later, belong to the CPU or
+to a separate future RTL extension.

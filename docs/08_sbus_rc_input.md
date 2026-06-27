@@ -194,6 +194,11 @@ After inversion, standard UART reception logic applies.
 | CH6 | Flight mode | 3-position | Low/Mid/High |
 | CH7–16 | Auxiliary | 172–1811 | User configurable |
 
+The first RTL build uses fixed channel assignments and synthesized thresholds
+for arming, mode selection, deadband, and scaling. Optional CPU/AXI support may
+make the mapping user-configurable later, but valid RC decoding and manual
+control must work with RTL defaults alone.
+
 ---
 
 ## 5. Algorithm

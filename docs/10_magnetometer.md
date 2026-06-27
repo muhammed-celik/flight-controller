@@ -5,10 +5,12 @@
 The selected magnetometer is the **AK8963 contained inside the MPU9250 on the
 GY-91 module**. No separate QMC5883L is used.
 
-RTL acquires coherent raw magnetic samples and status. CPU software normally
-performs hard-iron/soft-iron calibration, frame rotation, and validation. EKF
-mode uses the result directly; RTL complementary mode may initially omit
-magnetic yaw correction or consume CPU-calibrated heading later.
+RTL acquires coherent raw magnetic samples and status, but magnetic yaw
+correction is not required for first-flight manual stabilization. CPU software
+later performs hard-iron/soft-iron calibration, frame rotation, and validation.
+EKF mode uses the calibrated result directly; RTL complementary mode may
+initially omit magnetic yaw correction or consume a later calibrated heading
+source.
 
 ## 2. Access Path and Identification
 
@@ -48,15 +50,15 @@ The axis words are little-endian, unlike the MPU9250 accel/gyro burst. Reading
 7. Schedule reads at 50-100 Hz.
 ```
 
-For each axis, CPU software applies the factory adjustment approximately as
+For each axis, later CPU software applies the factory adjustment approximately as
 
 ```text
 adjustment = ((ASA - 128) / 256) + 1
 field_uT = raw * adjustment * 0.15
 ```
 
-Retain the raw word and ASA byte in the AXI-visible data for reproducible
-calibration and logging.
+Retain the raw word and ASA byte in status/optional AXI-visible data for
+reproducible calibration and logging.
 
 ## 5. RTL Responsibilities
 
@@ -83,10 +85,11 @@ a 3 x 3 matrix:
 m_cal = S * (m_raw - b)
 ```
 
-Calibration is computed and applied on the CPU. The CPU also rotates the vector
-from sensor axes into the vehicle body frame. Axis signs and permutation must be
-measured for the actual GY-91 mounting orientation; they must not be inferred
-from a generic breakout-board photo.
+Calibration is computed and applied on the CPU in the later EKF/heading-hold
+milestone. The CPU also rotates the vector from sensor axes into the vehicle
+body frame. Axis signs and permutation must be measured for the actual GY-91
+mounting orientation; they must not be inferred from a generic breakout-board
+photo.
 
 The CPU EKF, or any later RTL heading-correction extension, uses a magnetic
 observation only when:
@@ -111,7 +114,7 @@ electrical contention and records data age independently for each sensor.
 | AK8963 absent or wrong WIA | Disable heading-hold; continue gyro/accel control |
 | Overflow bit set | Discard sample and count overflow |
 | Stale sample | Skip magnetic estimator update |
-| Implausible field/innovation | CPU rejects update and raises diagnostic flag |
+| Implausible field/innovation | Future CPU/heading logic rejects update and raises diagnostic flag |
 | Shared bus timeout | RTL performs bus recovery and retries later |
 
 Magnetometer loss alone does not require immediate disarm, but autonomous modes
