@@ -6,6 +6,7 @@ filesets:
   rtl:
     files:
       - src/spi_master_pkg.sv
+      - src/spi_master_driver.sv
       - src/spi_master.sv
     file_type: systemVerilogSource
 

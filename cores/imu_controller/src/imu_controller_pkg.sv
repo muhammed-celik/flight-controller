@@ -27,4 +27,10 @@ package imu_controller_pkg;
   localparam bit [7:0] BMP280_CTRL_MEAS_DATA = 8'h27; // Control and Measurement Register
   localparam bit [7:0] BMP280_CONFIG_DATA = 8'h00; // Configuration Register
 
+  //SPI Commnand Definitions
+  localparam bit SPI_READ_CMD = 1; // Read Command
+  localparam bit SPI_WRITE_CMD = 0; // Write Command
+  localparam bit SPI_CS_MPU9250 = 1; // MPU9250 Chip Select
+  localparam bit SPI_CS_BMP280 = 0; // BMP280 Chip Select
+
 endpackage
