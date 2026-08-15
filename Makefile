@@ -77,6 +77,7 @@ regress:
 	$(MAKE) sim CORE=reset_sync COCOTB_MODULE=test_reset_sync
 	$(MAKE) sim CORE=timebase COCOTB_MODULE=test_timebase
 	$(MAKE) sim CORE=clock_reset COCOTB_MODULE=test_clock_reset
+	$(MAKE) sim CORE=fc_axi_regs COCOTB_MODULE=test_fc_axi_regs
 
 synth: check-fusesoc check-vivado
 	PATH="$(dir $(shell command -v $(VIVADO))):$$PATH" $(FUSESOC) $(FUSESOC_FLAGS) run \

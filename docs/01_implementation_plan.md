@@ -16,7 +16,13 @@ Every RTL phase runs this quality gate:
 4. Focused Cocotb simulation tests run against that model.
 5. Full Verilator+Cocotb regression.
 6. Vivado synthesis check when FPGA-specific resources or interfaces change.
-7. Documentation and requirements update.
+7. Dedicated functional documentation and requirements update.
+
+Every new functional core must have a document under `docs/` before its phase
+can be marked complete. The document must describe its purpose, external
+interface, operating behavior, reset and timing semantics, configuration,
+status and error handling, safety-relevant behavior, and verification coverage.
+Register-mapped cores must also document every register and atomic-access rule.
 
 ## Phase Status
 
@@ -29,7 +35,7 @@ phase may be `In progress` at a time.
 | 0 | Specifications | Complete | Architecture, pinout, verification, and implementation documents approved |
 | 1 | Build and verification infrastructure | Complete | `make lint` clean; `make sim` passes 2/2 clock-wrapper tests; failure propagation verified |
 | 2 | Clock, reset, and timebase | Complete | Slang clean; 10/10 Cocotb tests pass; all cores synthesize; clock constraints verified |
-| 3 | AXI4-Lite register core | Not started (next) | - |
+| 3 | AXI4-Lite register core | Complete | Slang clean; 17/17 full-regression tests pass; Vivado synthesis clean |
 | 4 | I2C master | Not started | - |
 | 5 | GY-91 initialization | Not started | - |
 | 6 | Sensor scheduler and snapshots | Not started | - |
@@ -192,6 +198,24 @@ Acceptance gate:
 
 - Randomized Cocotb AXI tests pass.
 - No AXI register directly asserts motor authorization.
+
+Completion evidence, 2026-08-15:
+
+- `make lint` completed with zero Slang errors and zero warnings.
+- `make regress` passed 17 of 17 Cocotb tests, including all seven AXI register
+  tests and the complete Phase 1-2 regression.
+- Directed AXI tests cover independent write-channel ordering, read and write
+  backpressure, byte strobes, invalid and misaligned accesses, coherent
+  snapshots, atomic commits, sticky masked interrupts, and transaction resets.
+- Randomized testing covers 100 writes with varied AW/W ordering, byte strobes,
+  values, and response backpressure.
+- `fc_axi_regs` synthesized successfully for `xc7a35tcpg236-1` with zero errors
+  and zero critical warnings.
+- Reviewed synthesis warnings are limited to intentionally ignored AXI
+  `AWPROT`/`ARPROT` attributes and Vivado's benign parallel-synthesis criterion
+  notice for the small standalone design.
+- The register map exposes configuration data only through shadow and active
+  outputs; it provides no motor-authorization register or output.
 
 ## 6. Phase 4: I2C Master
 
