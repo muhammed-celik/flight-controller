@@ -36,7 +36,7 @@ phase may be `In progress` at a time.
 | 1 | Build and verification infrastructure | Complete | `make lint` clean; `make sim` passes 2/2 clock-wrapper tests; failure propagation verified |
 | 2 | Clock, reset, and timebase | Complete | Slang clean; 10/10 Cocotb tests pass; all cores synthesize; clock constraints verified |
 | 3 | AXI4-Lite register core | Complete | Slang clean; 17/17 full-regression tests pass; Vivado synthesis clean |
-| 4 | I2C master | Not started | - |
+| 4 | I2C master | Complete | Slang clean; 30/30 full-regression tests pass; Vivado synthesis clean |
 | 5 | GY-91 initialization | Not started | - |
 | 6 | Sensor scheduler and snapshots | Not started | - |
 | 7 | Calibration and filtering | Not started | - |
@@ -240,6 +240,25 @@ Acceptance gate:
 
 - FPGA outputs never actively drive an I2C line high.
 - All recovery paths terminate in a bounded time.
+
+Completion evidence, 2026-08-15:
+
+- `make lint` completed with zero Slang errors and zero warnings.
+- `make regress` passed 30 of 30 Cocotb tests, including all 13 I2C bus-level
+  tests and the complete Phase 1-3 regression.
+- The I2C tests use resolved wired-AND lines and an edge-driven behavioral
+  target; they cover writes, reads, repeated START, stream backpressure,
+  standard/fast timing, randomized stretching, NACK positions, stuck lines,
+  exact nine-clock recovery, bounded timeouts, and reset interruption.
+- Production defaults meet 100 kHz standard-mode and 400 kHz fast-mode timing,
+  including their respective 4.70 us and 1.30 us bus-free minima.
+- `i2c_master` synthesized successfully for `xc7a35tcpg236-1` with zero errors
+  and zero critical warnings. The only synthesis warning was Vivado's benign
+  parallel-synthesis criterion notice for the small standalone design.
+- SDA and SCL are represented only by resolved inputs and drive-low outputs;
+  the core has no signal capable of actively driving either line high.
+- All SCL-high waits, stream stalls, and recovery sequences have explicit
+  finite bounds, as documented in `docs/05_i2c_master.md`.
 
 ## 7. Phase 5: GY-91 Initialization
 
