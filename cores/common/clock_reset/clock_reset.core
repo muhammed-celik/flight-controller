@@ -1,41 +1,39 @@
 CAPI=2:
-name: ::cmod_a7_top:1.0.0
-description: Top-level design for CMOD Artix A7-35T (depends on clk_gen + blinky)
+name: ::clock_reset:1.0.0
+description: Cmod A7 system clock, MMCM lock qualification, and reset release
 
 filesets:
   rtl:
     files:
-      - src/top.sv
+      - src/fc_clock_reset.sv
     file_type: systemVerilogSource
     depend:
       - ::clk_gen:1.0.0
-      - ::blinky:1.0.0
+      - ::reset_sync:1.0.0
 
-  cocotb:
+  sim:
     files:
-      - tb/test_top.py
-    file_type: user
+      - tb/test_clock_reset.py: {file_type: user}
+    depend:
+      - ::xilinx_7series_sim:1.0.0
 
   constraints:
     files:
-      - constraints/cmod_a7.xdc
+      - constraints/clock_reset.xdc
     file_type: xdc
 
 targets:
   default: &default
     filesets: [rtl]
-    toplevel: top
+    toplevel: fc_clock_reset
 
   sim:
-    filesets: [rtl, cocotb]
-    toplevel: top
+    filesets: [rtl, sim]
+    toplevel: fc_clock_reset
     default_tool: verilator
     tools:
       verilator:
-        verilator_options: [--trace, -Wno-fatal]
         mode: cc
-      icarus:
-        iverilog_options: [-g2012]
 
   synth:
     <<: *default
@@ -44,3 +42,4 @@ targets:
     tools:
       vivado:
         part: xc7a35tcpg236-1
+        pnr: none

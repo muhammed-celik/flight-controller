@@ -1,0 +1,13 @@
+CAPI=2:
+name: ::xilinx_7series_sim:1.0.0
+description: Behavioral Xilinx 7-series primitive models for Verilator tests
+
+filesets:
+  sim:
+    files:
+      - src/xilinx_primitives.sv
+    file_type: systemVerilogSource
+
+targets:
+  default:
+    filesets: [sim]
