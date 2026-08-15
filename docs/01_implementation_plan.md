@@ -37,7 +37,7 @@ phase may be `In progress` at a time.
 | 2 | Clock, reset, and timebase | Complete | Slang clean; 10/10 Cocotb tests pass; all cores synthesize; clock constraints verified |
 | 3 | AXI4-Lite register core | Complete | Slang clean; 17/17 full-regression tests pass; Vivado synthesis clean |
 | 4 | I2C master | Complete | Slang clean; 30/30 full-regression tests pass; Vivado synthesis clean |
-| 5 | GY-91 initialization | Not started | - |
+| 5 | GY-91 initialization | Complete | Slang clean; 40/40 full-regression tests pass; integrated synthesis clean |
 | 6 | Sensor scheduler and snapshots | Not started | - |
 | 7 | Calibration and filtering | Not started | - |
 | 8 | CRSF receiver | Not started | - |
@@ -282,6 +282,32 @@ Acceptance gate:
 
 - Ready asserts only after required configuration is read back correctly.
 - Initialization cannot hang indefinitely.
+
+Completion evidence, 2026-08-15:
+
+- `make lint` completed with zero Slang errors and zero warnings.
+- `make regress` passed 40 of 40 Cocotb tests, including all ten integrated
+  GY-91 subsystem tests and the complete Phase 1-4 regression.
+- The subsystem regression connects the initializer and register adapter to the
+  real I2C master and register-accurate MPU-9250, AK8963, and BMP280 models over
+  resolved open-drain bus lines.
+- Tests verify the exact 42-transaction nominal sequence, alternate addresses,
+  reset delays, configuration values and masks, factory-data packing, delayed
+  BMP status, dependency handling, and explicit reinitialization.
+- A transient address NACK is injected independently at every nominal
+  transaction position; every operation retries identically and initialization
+  still succeeds. Exhausted retries and semantic failures are checked for all
+  three device paths.
+- `gy91_init_subsystem`, including the I2C master and register adapter,
+  synthesized successfully for `xc7a35tcpg236-1` with zero errors and zero
+  critical warnings.
+- Reviewed synthesis warnings are limited to the intentionally constant
+  standard-mode selection, removal of an unreachable adapter state bit, and
+  Vivado's benign small-design parallel-synthesis notice.
+- All waits, polls, I2C operations, and retries have finite limits; `ready`
+  remains low until every required identity and masked readback passes.
+- The full behavior and diagnostics are documented in
+  `docs/06_gy91_initialization.md`.
 
 ## 8. Phase 6: Sensor Scheduler and Snapshots
 

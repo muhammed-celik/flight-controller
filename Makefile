@@ -78,6 +78,7 @@ regress:
 	$(MAKE) sim CORE=timebase COCOTB_MODULE=test_timebase
 	$(MAKE) sim CORE=clock_reset COCOTB_MODULE=test_clock_reset
 	$(MAKE) sim CORE=i2c_master COCOTB_MODULE=test_i2c_master
+	$(MAKE) sim CORE=gy91_init COCOTB_MODULE=test_gy91_init
 	$(MAKE) sim CORE=fc_axi_regs COCOTB_MODULE=test_fc_axi_regs
 
 synth: check-fusesoc check-vivado
