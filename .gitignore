@@ -2,6 +2,7 @@
 build/
 
 # Cocotb artifacts
+.venv/
 sim_build/
 results.xml
 __pycache__/
