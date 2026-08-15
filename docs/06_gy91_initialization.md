@@ -11,6 +11,12 @@ connects both blocks to `i2c_master` and exposes sampled SCL/SDA inputs and
 open-drain drive-low outputs. The subsystem wrapper uses production defaults;
 only `gy91_init_tb` uses accelerated verification timing.
 
+The adapter latches a per-request mode selection with the other request fields.
+The initializer ties standard mode; after initialization releases ownership
+and the runtime path is reset/idle, the sensor scheduler takes ownership and
+uses fast mode for every acquisition. See `07_sensor_scheduler.md` for the
+handoff and runtime reset contract.
+
 Acquisition, periodic scheduling, sample compensation, and CPU snapshots are
 outside this block.
 
@@ -122,9 +128,9 @@ increments `init_sequence` only when the new run completes. Reset aborts delays
 or active I2C traffic, releases both lines on the next clock, clears all status
 and counters, and automatically starts initialization from the power-up delay.
 
-## Deferred To Phase 6
+## Runtime Handoff
 
-Phase 6 owns periodic MPU/AK/BMP arbitration, 1 kHz/100 Hz/50 Hz scheduling,
+The sensor scheduler owns periodic MPU/AK/BMP arbitration, 1 kHz/100 Hz/50 Hz scheduling,
 data-ready policy, sample timestamps and sequence numbers, coherent snapshots,
 FIFO behavior, freshness and missed-sample accounting, and runtime I2C fault
 policy. This phase exports calibration bytes but does not compensate samples.

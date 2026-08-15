@@ -95,7 +95,8 @@ module gy91_init_subsystem #(
 
   i2c_register_master adapter (
     .clk, .rst_n, .req_valid, .req_ready, .req_address, .req_register,
-    .req_write, .req_write_data, .req_read_count, .rx_valid, .rx_ready,
+    .req_write, .req_write_data, .req_read_count, .req_fast_mode(1'b0),
+    .rx_valid, .rx_ready,
     .rx_data, .rx_index, .rsp_done, .rsp_error, .rsp_error_code,
     .rsp_error_index, .i2c_cmd_valid(cmd_valid), .i2c_cmd_ready(cmd_ready),
     .i2c_cmd_address(cmd_address), .i2c_cmd_write_count(cmd_write_count),

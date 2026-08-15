@@ -9,6 +9,7 @@ module i2c_register_master (
   input  logic       req_write,
   input  logic [7:0] req_write_data,
   input  logic [7:0] req_read_count,
+  input  logic       req_fast_mode,
 
   output logic       rx_valid,
   input  logic       rx_ready,
@@ -58,6 +59,7 @@ module i2c_register_master (
   logic       write_reg;
   logic [7:0] write_data_reg;
   logic [7:0] read_count_reg;
+  logic       fast_mode_reg;
   logic [7:0] read_index_reg;
 
   always_comb begin
@@ -70,7 +72,7 @@ module i2c_register_master (
     i2c_cmd_address     = address_reg;
     i2c_cmd_write_count = write_reg ? 8'd2 : 8'd1;
     i2c_cmd_read_count  = write_reg ? 8'd0 : read_count_reg;
-    i2c_cmd_fast_mode   = 1'b0;
+    i2c_cmd_fast_mode   = fast_mode_reg;
 
     i2c_tx_valid        = (state == SEND_REGISTER) || (state == SEND_DATA);
     i2c_tx_data         = (state == SEND_DATA) ? write_data_reg : register_reg;
@@ -85,6 +87,7 @@ module i2c_register_master (
       write_reg         <= 1'b0;
       write_data_reg    <= '0;
       read_count_reg    <= '0;
+      fast_mode_reg     <= 1'b0;
       read_index_reg    <= '0;
       rsp_done          <= 1'b0;
       rsp_error         <= 1'b0;
@@ -101,6 +104,7 @@ module i2c_register_master (
             write_reg      <= req_write;
             write_data_reg <= req_write_data;
             read_count_reg <= req_read_count;
+            fast_mode_reg  <= req_fast_mode;
             read_index_reg <= '0;
 
             if (!req_write && (req_read_count == 0)) begin

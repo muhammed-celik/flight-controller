@@ -38,7 +38,7 @@ phase may be `In progress` at a time.
 | 3 | AXI4-Lite register core | Complete | Slang clean; 17/17 full-regression tests pass; Vivado synthesis clean |
 | 4 | I2C master | Complete | Slang clean; 30/30 full-regression tests pass; Vivado synthesis clean |
 | 5 | GY-91 initialization | Complete | Slang clean; 40/40 full-regression tests pass; integrated synthesis clean |
-| 6 | Sensor scheduler and snapshots | Not started | - |
+| 6 | Sensor scheduler and snapshots | Complete | Slang clean; 50/50 full-regression tests pass; scheduler synthesis clean |
 | 7 | Calibration and filtering | Not started | - |
 | 8 | CRSF receiver | Not started | - |
 | 9 | DShot600 output | Not started | - |
@@ -332,6 +332,32 @@ Acceptance gate:
 
 - MPU deadlines are met under maximum expected normal bus load.
 - Torn sensor snapshots are impossible.
+
+Completion evidence, 2026-08-16:
+
+- `make lint` completed with zero Slang errors and zero warnings.
+- `make regress` passed 50 of 50 Cocotb tests, including all ten runtime sensor
+  scheduler tests and the complete Phase 1-5 regression.
+- The focused subsystem connects the scheduler through the real register
+  adapter and I2C master to edge-driven MPU-9250, AK8963, and BMP280 models on
+  resolved open-drain lines.
+- A 101-period scaled long-run test produced exactly 101 MPU, 11 AK, and 6 BMP
+  releases and accepted samples with no MPU release misses or deadline misses.
+  Uniform timing scaling preserves the production 400 kHz bus-load ratio.
+- Tests cover common-phase priority, bounded MPU data-ready retry, contention
+  and coalescing, transport and semantic faults, BMP burst atomicity, freshness
+  and timestamp rollover, FIFO wrap/overflow/underflow, coherent snapshots,
+  readiness loss, and reset interruption.
+- Snapshot storage changes only on explicit capture and remains stable while
+  live records and FIFO state advance, preventing torn multiword observations.
+- `sensor_scheduler` synthesized successfully for `xc7a35tcpg236-1` with zero
+  errors and zero critical warnings; its 16-entry by 256-bit FIFO inferred as
+  distributed RAM.
+- Reviewed synthesis warnings are limited to constant fields on the standalone
+  read-only request interface, small-design parallelism, and flattened
+  high-port-count floorplanning guidance.
+- The complete runtime contract and record format are documented in
+  `docs/07_sensor_scheduler.md`.
 
 ## 9. Phase 7: Calibration and Filtering
 

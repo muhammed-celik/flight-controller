@@ -1,0 +1,38 @@
+CAPI=2:
+name: ::sensor_scheduler:1.0.0
+description: Periodic GY-91 sensor scheduler, record formatter, and sample FIFO
+
+filesets:
+  rtl:
+    files:
+      - src/sensor_fifo.sv
+      - src/sensor_scheduler.sv
+    file_type: systemVerilogSource
+
+  sim:
+    depend:
+      - ::gy91_init:1.0.0
+    files:
+      - tb/sensor_scheduler_tb.sv: {file_type: systemVerilogSource}
+      - tb/test_sensor_scheduler.py: {file_type: user}
+
+targets:
+  default: &default
+    filesets: [rtl]
+    toplevel: sensor_scheduler
+
+  sim:
+    filesets: [rtl, sim]
+    toplevel: sensor_scheduler_tb
+    default_tool: verilator
+    tools:
+      verilator:
+        mode: cc
+
+  synth:
+    <<: *default
+    default_tool: vivado
+    tools:
+      vivado:
+        part: xc7a35tcpg236-1
+        pnr: none
