@@ -1,70 +1,187 @@
 module spi_master 
   import spi_master_pkg::*;
 (
-  input  logic i_clk,
-  input  logic i_rstn,
-
-  input  logic i_req_valid,
-  input  logic [$clog2(CS_CNT)-1:0] i_req_device,
-  input  logic i_req_write,
-  input  logic [7:0] i_req_addr,
-  input  logic [7:0] i_req_len,
-  input  logic i_req_auto_inc,
-
-  input  logic i_wdata_valid,
-  input  logic [7:0] i_wdata,
-
-  output logic o_rdata_valid,
-  output logic [7:0] o_rdata,
-
-  output logic o_busy,
+  input logic i_clk,
+  input logic i_rstn,
+  //Top Level Interface
+  input logic i_en,
+  input logic [7:0] i_data,
   output logic o_done,
-
-  output logic [CS_CNT-1:0] o_cs,
+  output logic [7:0] o_data,
+  output logic o_busy,
+  //SPI Pinout
+  output logic o_cs,
   output logic o_sclk,
   output logic o_mosi,
   input  logic i_miso
 );
 
-logic start_spi, spi_busy, spi_done;
-logic [$clog2(CS_CNT)-1:0] cs_sel;
-logic [15:0] clk_div;
-logic [1:0] spi_mode;
-logic [7:0] nbytes;
-logic tx_valid, rx_valid;
-logic [7:0] tx_data, rx_data;
+//SCLK generation
+logic [$clog2(CLK_DIV)-1:0] clk_div_cntr;
+logic sclk;
 
-assign start_spi = i_req_valid;
-assign o_busy = spi_busy;
-assign o_done = spi_done;
-assign cs_sel = i_req_device;
-assign clk_div = 16'd1; // we can make this configurable if needed
-assign spi_mode = 2'd3; // we can make this configurable if needed
-assign nbytes = i_req_len + 1; // input request length excludes the address byte, so we add 1 to account for it
-assign tx_valid = i_wdata_valid;
-assign tx_data = i_req_valid ? i_req_addr : i_wdata; // if request is valid, we send the address first, then the data
-assign o_rdata_valid = rx_valid;
-assign o_rdata = rx_data;
+always_ff @(posedge i_clk or negedge i_rstn) begin
+  if(!i_rstn) begin
+    sclk <= CPOL;
+    clk_div_cntr <= '0;
+  end else begin
+    case (state)
+      ST_IDLE, ST_CS_SETUP, ST_CS_HOLD: begin
+        sclk <= CPOL;
+        clk_div_cntr <= '0;
+      end
+      ST_START, ST_TRANSFER, ST_FINISH: begin
+        if(clk_div_cntr == CLK_DIV-1) begin
+          sclk <= ~sclk;
+          clk_div_cntr <= '0;
+        end else begin
+          clk_div_cntr <= clk_div_cntr + 1;
+        end
+      end
+    endcase
+  end
+end
 
-spi_master_driver  spi_master_driver_inst (
-  .i_clk(i_clk),
-  .i_rstn(i_rstn),
-  .i_start(start_spi),
-  .o_busy(spi_busy),
-  .o_done(spi_done),
-  .i_cs_sel(cs_sel),
-  .i_clk_div(clk_div),
-  .i_mode(spi_mode),
-  .i_nbytes(nbytes),
-  .i_tx_valid(tx_valid),
-  .i_tx_data(tx_data),
-  .o_rx_valid(rx_valid),
-  .o_rx_data(rx_data),
-  .o_cs(o_cs),
-  .o_sclk(o_sclk),
-  .o_mosi(o_mosi),
-  .i_miso(i_miso)
-);
+//Data sample-shift edge generation
+logic sclk_prev, sclk_rise, sclk_fall;
+logic sample_edge, shift_edge, first_edge, second_edge;
 
+always_ff @(posedge i_clk or negedge i_rstn) begin
+  if(!i_rstn) begin
+    sclk_prev <= CPOL;
+    sclk_rise <= 1'b0;
+    sclk_fall <= 1'b0;
+  end else begin
+    sclk_prev <= sclk;
+    sclk_rise <= (sclk_prev == 1'b0 && sclk == 1'b1);
+    sclk_fall <= (sclk_prev == 1'b1 && sclk == 1'b0);
+  end
+end
+
+assign sample_edge = CPHA ^ CPOL ? sclk_fall   : sclk_rise;
+assign shift_edge  = CPHA ^ CPOL ? sclk_rise   : sclk_fall;
+assign first_edge  = CPOL        ? sclk_fall   : sclk_rise;
+assign last_edge   = CPOL        ? sclk_rise   : sclk_fall;
+
+
+//State Machine
+typedef enum logic [2:0] {ST_IDLE,ST_CS_SETUP,ST_START,ST_TRANSFER,ST_FINISH,ST_CS_HOLD} state_t;
+state_t state;
+
+logic [7:0] tx_shift_reg, rx_shift_reg;
+logic [3:0] bit_cntr;
+logic [$clog2(CS_SETUP_CYCLE)-1:0] cs_setup_cntr;
+logic [$clog2(CS_HOLD_CYCLE)-1:0] cs_hold_cntr;
+
+always_ff @(posedge i_clk or negedge i_rstn) begin
+  if(!i_rstn) begin
+    state <= ST_IDLE;
+    o_cs <= 1'b1;
+    rx_shift_reg <= '0;
+    tx_shift_reg <= '0;
+    bit_cntr <= '0;
+    cs_setup_cntr <= '0;
+    cs_hold_cntr <= '0;
+  end else begin
+    case(state)
+      ST_IDLE: begin
+        if(i_en) begin
+          state <= ST_CS_SETUP;
+          o_cs <= 1'b0;
+          cs_setup_cntr <= '0;
+          tx_shift_reg <= i_data;
+          rx_shift_reg <= '0;
+          bit_cntr <= '0;
+        end
+      end
+      ST_CS_SETUP: begin
+        if(cs_setup_cntr == CS_SETUP_CYCLE-1) begin
+          state <= ST_START;
+          cs_setup_cntr <= '0;
+        end else begin
+          cs_setup_cntr <= cs_setup_cntr + 1;
+        end
+      end
+      ST_START: begin
+        if(CPOL) begin
+          if(first_edge) begin
+            state <= ST_TRANSFER;
+          end
+        end else begin
+          if(first_edge) begin
+            if(CPHA) begin
+              state <= ST_TRANSFER;
+              bit_cntr <= bit_cntr + 1;
+              tx_shift_reg <= {tx_shift_reg[6:0], 1'b0};
+            end else begin
+              state <= ST_TRANSFER;
+              bit_cntr <= bit_cntr + 1;
+              rx_shift_reg <= {rx_shift_reg[6:0], i_miso};
+            end
+          end
+        end
+      end
+      ST_TRANSFER: begin
+        if(CPOL ^ CPHA) begin
+          if(shift_edge) begin
+            tx_shift_reg <= {tx_shift_reg[6:0], 1'b0};
+            bit_cntr <= bit_cntr + 1;
+          end
+          if(sample_edge) begin
+            rx_shift_reg <= {rx_shift_reg[6:0], i_miso};
+            if(bit_cntr == 4'd15) begin
+              state <= ST_FINISH;
+              bit_cntr <= '0;
+              o_done <= 1'b1;
+            end else begin
+              bit_cntr <= bit_cntr + 1;
+            end
+          end
+        end else begin
+          if(shift_edge) begin
+            tx_shift_reg <= {tx_shift_reg[6:0], 1'b0};
+            if(bit_cntr == 4'd15) begin
+              state <= ST_FINISH;
+              bit_cntr <= '0;
+              o_done <= 1'b1;
+            end else begin
+              bit_cntr <= bit_cntr + 1;
+            end
+          end
+          if(sample_edge) begin
+            rx_shift_reg <= {rx_shift_reg[6:0], i_miso};
+          end
+        end
+      end
+      ST_FINISH: begin
+        o_done <= 1'b0;
+        if(i_en) begin
+          state <= ST_TRANSFER;
+          tx_shift_reg <= i_data;
+          rx_shift_reg <= '0;
+        end else begin
+          if(CPOL) begin
+            if(last_edge) begin
+              state <= ST_CS_HOLD;
+              cs_hold_cntr <= '0;
+            end
+          end else begin
+            state <= ST_CS_HOLD;
+            cs_hold_cntr <= '0;
+          end
+        end
+      end
+      ST_CS_HOLD: begin
+        if(cs_hold_cntr == CS_HOLD_CYCLE-1) begin
+          state <= ST_IDLE;
+          o_cs <= 1'b1;
+          cs_hold_cntr <= '0;
+        end else begin
+          cs_hold_cntr <= cs_hold_cntr + 1;
+        end
+      end
+    endcase
+  end
+end
 
 endmodule
