@@ -132,6 +132,9 @@ always_ff @(posedge i_clk or negedge i_rstn) begin
           cs_hold_cntr <= cs_hold_cntr + 1;
         end
       end
+      default: begin
+        state <= ST_IDLE;
+      end
     endcase
   end
 end
