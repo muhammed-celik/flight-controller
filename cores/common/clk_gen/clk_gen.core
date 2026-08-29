@@ -8,7 +8,21 @@ filesets:
       - src/clk_gen.sv
     file_type: systemVerilogSource
 
+  sim:
+    files:
+      - tb/test_clk_gen.py: {file_type: user}
+    depend:
+      - ::xilinx_7series_sim:1.0.0
+
 targets:
   default:
     filesets: [rtl]
     toplevel: clk_gen
+
+  sim:
+    filesets: [rtl, sim]
+    toplevel: clk_gen
+    default_tool: verilator
+    tools:
+      verilator:
+        mode: cc

@@ -1,6 +1,5 @@
 module clk_gen #(
   parameter real CLKIN_FREQ  = 12.0,
-  parameter real CLKOUT_FREQ = 100.0,
   parameter real VCO_MULT    = 50.0,
   parameter real OUT_DIV     = 6.0,
   parameter int  DIV_CLK     = 1
