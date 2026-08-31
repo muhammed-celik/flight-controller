@@ -15,6 +15,17 @@ module spi_master
   input  logic i_miso
 );
 
+//State Machine
+typedef enum logic [2:0] {
+  ST_IDLE,
+  ST_CS_SETUP,
+  ST_START,
+  ST_TRANSFER,
+  ST_FINISH,
+  ST_CS_HOLD
+} state_t;
+state_t state;
+
 //Data sample-shift edge generation
 logic sck_en, sclk, sclk_rise, sclk_fall;
 logic sample_edge, shift_edge;
@@ -34,10 +45,6 @@ spi_clk_gen  spi_clk_gen_inst (
 
 assign sample_edge = CPHA ^ CPOL ? sclk_fall : sclk_rise;
 assign shift_edge  = CPHA ^ CPOL ? sclk_rise : sclk_fall;
-
-//State Machine
-typedef enum logic [1:0] {ST_IDLE, ST_CS_SETUP, ST_TRANSFER, ST_CS_HOLD} state_t;
-state_t state;
 
 logic [7:0] tx_shift_reg, rx_shift_reg;
 logic [2:0] bit_cntr;
@@ -82,14 +89,16 @@ always_ff @(posedge i_clk or negedge i_rstn) begin
       ST_START: begin
         if(sclk_fall) begin
           state <= ST_TRANSFER;
+          o_mosi <= tx_shift_reg[7];
+          tx_shift_reg <= {tx_shift_reg[6:0], 1'b0};
         end
       end
       ST_TRANSFER: begin
-        if(bit_cntr == 3'd7 && sclk_fall) begin
+        if(sclk_fall && bit_cntr == 3'd7) begin
           state <= ST_FINISH;
           bit_cntr <= '0;
           o_done <= 1'b1;
-        end else if(sclk_fall) begin
+        end else if(sample_edge) begin
           bit_cntr <= bit_cntr + 1;
         end
 
@@ -109,6 +118,7 @@ always_ff @(posedge i_clk or negedge i_rstn) begin
           tx_shift_reg <= i_data;
           rx_shift_reg <= '0;
           bit_cntr <= '0;
+          o_mosi <= i_data[7];
         end else begin
           if(CPOL) begin
             if(sclk_rise) begin

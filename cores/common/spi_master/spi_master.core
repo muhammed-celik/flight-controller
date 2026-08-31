@@ -1,0 +1,28 @@
+CAPI=2:
+name: ::spi_master:1.0.0
+description: SPI master
+
+filesets:
+  rtl:
+    files:
+      - src/spi_master_pkg.sv
+      - src/spi_clk_gen.sv
+      - src/spi_master.sv
+    file_type: systemVerilogSource
+
+  sim:
+    files:
+      - tb/test_spi_master.py: {file_type: user}
+
+targets:
+  default:
+    filesets: [rtl]
+    toplevel: spi_master
+
+  sim:
+    filesets: [rtl, sim]
+    toplevel: spi_master
+    default_tool: verilator
+    tools:
+      verilator:
+        mode: cc

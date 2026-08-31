@@ -1,0 +1,27 @@
+CAPI=2:
+name: ::i2c_master:1.0.0
+description: SPI master
+
+filesets:
+  rtl:
+    files:
+      - src/i2c_master_pkg.sv
+      - src/i2c_master.sv
+    file_type: systemVerilogSource
+
+  sim:
+    files:
+      - tb/test_i2c_master.py: {file_type: user}
+
+targets:
+  default:
+    filesets: [rtl]
+    toplevel: i2c_master
+
+  sim:
+    filesets: [rtl, sim]
+    toplevel: i2c_master
+    default_tool: verilator
+    tools:
+      verilator:
+        mode: cc

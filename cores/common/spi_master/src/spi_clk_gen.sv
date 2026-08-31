@@ -15,6 +15,7 @@ logic [$clog2(CLK_DIV)-1:0] clk_div_cntr;
 always @(posedge i_clk or negedge i_rstn) begin
   if(!i_rstn) begin
     sclk <= CPOL;
+    clk_div_cntr <= '0;
   end else begin
     if(i_sck_en) begin
       if(clk_div_cntr == (CLK_DIV/2)-1) begin
@@ -24,7 +25,8 @@ always @(posedge i_clk or negedge i_rstn) begin
         clk_div_cntr <= clk_div_cntr + 1;
       end
     end else begin
-      o_sclk <= CPOL;
+      sclk <= CPOL;
+      clk_div_cntr <= '0;
     end
   end
 end
