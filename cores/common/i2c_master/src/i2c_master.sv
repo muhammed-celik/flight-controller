@@ -58,6 +58,7 @@ logic [7:0] data_reg;
 logic [2:0] bit_cntr;
 logic done_int;
 logic ack_error;
+logic en_reg;
 
 always_ff @(posedge i_clk or negedge i_rstn) begin
   if(!i_rstn) begin
@@ -70,6 +71,7 @@ always_ff @(posedge i_clk or negedge i_rstn) begin
     done_int <= 1'b0;
     ack_error <= 1'b0;
     i2c_clk_en <= 1'b0;
+    en_reg <= 1'b0;
   end else begin
     case (state)
       ST_IDLE: begin
@@ -196,6 +198,7 @@ always_ff @(posedge i_clk or negedge i_rstn) begin
         if(scl_wr_tick) begin
           if(done_int) begin
             done_int <= 1'b0;
+            en_reg <= i_en; // Store the value of i_en for the next cycle
             if(i_en && (addr_rw_reg == {i_dev_addr, i_rw})) begin // If the same device and operation is requested, continue reading (burst read), send the ACK to the slave
               state <= ST_MASTER_ACK;
               sda_out <= 1'b0; // Assert ACK
@@ -228,9 +231,10 @@ always_ff @(posedge i_clk or negedge i_rstn) begin
       
       ST_MASTER_ACK: begin
         if(scl_wr_tick) begin
-          if(i_en && !sda_out) begin // If the same device and operation is requested, continue reading (burst read),
+          en_reg <= 1'b0; // Clear the stored value of i_en after processing
+          if(en_reg && !sda_out) begin // If the same device and operation is requested, continue reading (burst read),
             state <= ST_READ_DATA;
-          end else if(i_en) begin // If a different device or operation is requested, generate repeated start condition
+          end else if(en_reg) begin // If a different device or operation is requested, generate repeated start condition
             state <= ST_RSTART;
             sda_out <= 1'b1; // Release SDA for repeated start
           end else begin // If no more data is to be read, generate stop condition

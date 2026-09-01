@@ -12,7 +12,9 @@ filesets:
 
   sim:
     files:
-      - tb/test_spi_master.py: {file_type: user}
+      - tb/spi_master_tb.sv: {file_type: systemVerilogSource}
+      - tb/cocotb_env.cpp: {file_type: cppSource, copyto: cocotb_env.cpp}
+      - tb/test_spi_master.py: {file_type: user, copyto: test_spi_master.py}
 
 targets:
   default:
@@ -21,8 +23,14 @@ targets:
 
   sim:
     filesets: [rtl, sim]
-    toplevel: spi_master
-    default_tool: verilator
-    tools:
-      verilator:
-        mode: cc
+    toplevel: spi_master_tb
+    flow: sim
+    flow_options:
+      tool: verilator
+      cocotb_module: test_spi_master
+      mode: cc
+      verilator_options:
+        - --trace
+        - -Wno-WIDTHEXPAND
+        - -LDFLAGS "-Wl,--disable-new-dtags,-rpath,$$(dirname $$(cocotb-config --libpython))"
+      run_options: [--trace, --trace-file, spi_master.vcd]
