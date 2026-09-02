@@ -6,6 +6,7 @@ module spi_controller (
   input logic i_cmd_type, // 1: Read, 0: Write
   input logic [4:0] i_cmd_nbytes, // Number of bytes to transfer (minimum 1 (5'b00000), maximum 32 (5'b11111))
   input logic [7:0] i_cmd_addr, // Register Address
+
   input logic i_cmd_data_valid, // Register Data for Write is valid
   input logic [7:0] i_cmd_data, // Register Data for Write
 
@@ -91,7 +92,14 @@ always_ff @(posedge i_clk or negedge i_rstn) begin
           if(cmd_type_reg) begin // Read operation
             state <= ST_CMD_READ;
           end else begin // Write operation
-            state <= ST_CMD_WRITE;
+            if(i_cmd_data_valid) begin
+              state <= ST_CMD_WRITE;
+              spi_data_in <= i_cmd_data; // Send the data to write
+              spi_en <= 1'b1;
+            end else begin
+              state <= ST_SETUP; // Wait until the data to write is valid
+              spi_en <= 1'b0; // Wait for data to be valid
+            end
           end
         end else begin
           spi_en <= 1'b0; // Wait for SPI transfer to complete
@@ -112,10 +120,23 @@ always_ff @(posedge i_clk or negedge i_rstn) begin
           end
         end else begin
           spi_en <= 1'b0; // Wait for SPI transfer to complete
+          o_cmd_data_valid <= 1'b0;
         end
       end
 
-      ST_CMD_WRITE
+      ST_CMD_WRITE: begin
+        if(spi_done) begin
+          if(cmd_nbytes_reg == 0) begin
+            state <= ST_IDLE;
+            cmd_ready_int <= 1'b1;
+          end else begin
+            state <= ST_SETUP; // Go back to setup state to send next byte
+            cmd_nbytes_reg <= cmd_nbytes_reg - 1;
+          end
+        end else begin
+          spi_en <= 1'b0;
+        end
+      end
 
     endcase
   end
