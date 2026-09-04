@@ -23,6 +23,7 @@ async def reset_dut(dut):
     await RisingEdge(dut.i_clk)
     assert int(dut.scl.value) == 1
     assert int(dut.sda.value) == 1
+    assert int(dut.o_busy.value) == 0
 
 
 async def wait_for_stop(dut):
@@ -153,6 +154,30 @@ async def single_write(dut):
 
     assert error == 0
     assert await with_timeout(slave_task, TRANSACTION_TIMEOUT_MS, "ms") == [0x75]
+
+
+@cocotb.test()
+async def busy_tracks_active_transaction(dut):
+    cocotb.start_soon(Clock(dut.i_clk, SYS_CLK_NS, unit="ns").start())
+    await reset_dut(dut)
+
+    slave_task = cocotb.start_soon(I2cSlave(dut).receive_write(1))
+    await start_operation(dut, rw=0, data=0x3C)
+    await ReadOnly()
+    assert int(dut.o_busy.value) == 1
+    await Timer(1, unit="ns")
+
+    _, error = await wait_done(dut)
+    assert int(dut.o_busy.value) == 1
+    dut.i_en.value = 0
+    assert error == 0
+    assert await with_timeout(slave_task, TRANSACTION_TIMEOUT_MS, "ms") == [0x3C]
+
+    await Timer(1, unit="ns")
+    if int(dut.o_busy.value):
+        await with_timeout(FallingEdge(dut.o_busy), TRANSACTION_TIMEOUT_MS, "ms")
+    await ReadOnly()
+    assert int(dut.o_busy.value) == 0
 
 
 @cocotb.test()

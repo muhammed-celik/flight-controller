@@ -13,7 +13,8 @@ module spi_controller_tb (
   output logic       o_cs,
   output logic       o_sclk,
   output logic       o_mosi,
-  input  logic       i_miso
+  input  logic       i_miso,
+  output logic       o_spi_done
 );
 
   spi_controller dut (
@@ -33,5 +34,7 @@ module spi_controller_tb (
     .o_mosi,
     .i_miso
   );
+
+  assign o_spi_done = dut.spi_done;
 
 endmodule

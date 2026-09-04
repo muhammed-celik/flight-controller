@@ -36,7 +36,7 @@ async def issue_command(dut, read, address, byte_count):
     dut.i_cmd_valid.value = 0
 
 
-async def mode3_slave(dut, response_bytes, write_bytes=None):
+async def mode3_slave(dut, response_bytes):
     """Exchange MSB-first bytes as an SPI mode 3 slave."""
     captured = []
     await FallingEdge(dut.o_cs)
@@ -51,10 +51,6 @@ async def mode3_slave(dut, response_bytes, write_bytes=None):
             master_byte = (master_byte << 1) | int(dut.o_mosi.value)
 
         captured.append(master_byte)
-        if write_bytes is not None and 0 < byte_index < len(write_bytes):
-            await Timer(1, unit="ns")
-            dut.i_data.value = write_bytes[byte_index]
-
     await FallingEdge(dut.o_sclk)
     dut.i_miso.value = 0
     return captured
@@ -78,15 +74,11 @@ async def wait_for_transaction_end(dut):
 
 
 async def pulse_write_data(dut, write_data):
-    """Present each write byte for one clock after the preceding SPI byte."""
-    await FallingEdge(dut.o_cs)
+    """Present each write byte for one clock after spi_done is observed."""
     for data in write_data:
-        for _ in range(8):
-            await RisingEdge(dut.o_sclk)
-
-        # The controller detects spi_done one clock after the final sample edge.
-        for _ in range(3):
-            await RisingEdge(dut.i_clk)
+        await RisingEdge(dut.o_spi_done)
+        # spi_done and the controller state update settle on consecutive clocks.
+        await RisingEdge(dut.i_clk)
         await FallingEdge(dut.i_clk)
         dut.i_data.value = data
         dut.i_data_valid.value = 1
@@ -137,15 +129,12 @@ async def writes_single_and_multiple_bytes(dut):
 
     for address, write_data in ((0x11, [0xC3]), (0x36, [0xDE, 0xAD, 0xBE])):
         command = address & 0x7F
-        dut.i_data.value = write_data[0]
-        dut.i_data_valid.value = 1
-        slave_task = cocotb.start_soon(
-            mode3_slave(dut, [0x00] * (len(write_data) + 1), write_data)
-        )
+        slave_task = cocotb.start_soon(mode3_slave(dut, [0x00] * (len(write_data) + 1)))
+        data_task = cocotb.start_soon(pulse_write_data(dut, write_data))
 
         await issue_command(dut, read=0, address=address, byte_count=len(write_data))
         captured = await with_timeout(slave_task, TRANSFER_TIMEOUT_MS, "ms")
-        dut.i_data_valid.value = 0
+        await with_timeout(data_task, TRANSFER_TIMEOUT_MS, "ms")
         await wait_for_transaction_end(dut)
 
         assert captured == [command, *write_data]
@@ -196,15 +185,12 @@ async def writes_maximum_length_transfer(dut):
     await reset_dut(dut)
 
     write_data = [((index * 17) + 3) & 0xFF for index in range(32)]
-    dut.i_data.value = write_data[0]
-    dut.i_data_valid.value = 1
-    slave_task = cocotb.start_soon(
-        mode3_slave(dut, [0x00] * 33, write_data)
-    )
+    slave_task = cocotb.start_soon(mode3_slave(dut, [0x00] * 33))
+    data_task = cocotb.start_soon(pulse_write_data(dut, write_data))
 
     await issue_command(dut, read=0, address=0x7D, byte_count=len(write_data))
     captured = await with_timeout(slave_task, TRANSFER_TIMEOUT_MS, "ms")
-    dut.i_data_valid.value = 0
+    await with_timeout(data_task, TRANSFER_TIMEOUT_MS, "ms")
     await wait_for_transaction_end(dut)
 
     assert captured == [0x7D, *write_data]

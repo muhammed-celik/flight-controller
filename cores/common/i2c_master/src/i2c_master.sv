@@ -10,6 +10,7 @@ module i2c_master
   input logic [7:0] i_data,
 
   output logic o_done,
+  output logic o_busy,
   output logic o_error,
   output logic [7:0] o_data,
   // I2C Pinout
@@ -272,5 +273,8 @@ assign sda_oe = (state == ST_START || state == ST_DEV_ADDR_RW || state == ST_REG
 assign o_data = data_reg;
 assign o_done = done_int;
 assign o_error = ack_error;
+
+// o_busy is high when the I2C master is enabled and not done
+assign o_busy = state != ST_IDLE;
 
 endmodule
