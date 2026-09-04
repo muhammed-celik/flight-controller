@@ -132,8 +132,10 @@ always_ff @(posedge i_clk or negedge i_rstn) begin
       end
       ST_FINISH: begin
         if(CPHA) begin
-          state <= ST_CS_HOLD;
-          cs_hold_cntr <= '0;
+          if(sclk_rise) begin
+            state <= ST_CS_HOLD;
+            cs_hold_cntr <= '0;
+          end
         end else begin
           if(sample_edge) begin
             state <= ST_CS_HOLD;

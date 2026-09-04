@@ -1,0 +1,36 @@
+CAPI=2:
+name: ::spi_controller:1.0.0
+description: Command and data controller for the SPI master
+
+filesets:
+  rtl:
+    files:
+      - src/spi_controller.sv
+    file_type: systemVerilogSource
+    depend:
+      - ::spi_master:1.0.0
+
+  sim:
+    files:
+      - tb/spi_controller_tb.sv: {file_type: systemVerilogSource}
+      - tb/cocotb_env.cpp: {file_type: cppSource, copyto: cocotb_env.cpp}
+      - tb/test_spi_controller.py: {file_type: user, copyto: test_spi_controller.py}
+
+targets:
+  default:
+    filesets: [rtl]
+    toplevel: spi_controller
+
+  sim:
+    filesets: [rtl, sim]
+    toplevel: spi_controller_tb
+    flow: sim
+    flow_options:
+      tool: verilator
+      cocotb_module: test_spi_controller
+      mode: cc
+      verilator_options:
+        - --trace
+        - -Wno-WIDTHEXPAND
+        - -LDFLAGS "-Wl,--disable-new-dtags,-rpath,$$(dirname $$(cocotb-config --libpython))"
+      run_options: [--trace, --trace-file, spi_controller.vcd]

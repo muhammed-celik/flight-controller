@@ -1,11 +1,12 @@
-module spi_controller (
+module i2c_controller (
   input logic i_clk,
   input logic i_rstn,
   //Top Level Interface
   input logic i_cmd_valid,
   input logic i_cmd_type, // 1: Read, 0: Write
   input logic [4:0] i_cmd_nbytes, // Number of bytes to transfer (minimum 1 (5'b00000), maximum 32 (5'b11111))
-  input logic [7:0] i_cmd_addr, // Register Address
+  input logic [7:0] i_cmd_dev_addr, // Device Address
+  input logic [7:0] i_cmd_reg_addr, // Register Address
   output logic o_cmd_ready, // Ready to accept new command
 
   input logic i_data_valid, // Register Data for Write is valid
@@ -13,11 +14,9 @@ module spi_controller (
 
   output logic o_data_valid, // Register Data for Read is valid
   output logic [7:0] o_data, // Register Data for Read
-  //SPI Pinout
-  output logic o_cs,
-  output logic o_sclk,
-  output logic o_mosi,
-  input  logic i_miso
+  //I2C Pinout
+  output logic o_sda,
+  output logic o_scl
 );
 
 localparam bit CPOL = 1;
