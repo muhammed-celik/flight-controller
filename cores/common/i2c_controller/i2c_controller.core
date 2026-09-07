@@ -1,0 +1,36 @@
+CAPI=2:
+name: ::i2c_controller:1.0.0
+description: Command and data controller for the I2C master
+
+filesets:
+  rtl:
+    files:
+      - src/i2c_controller.sv
+    file_type: systemVerilogSource
+    depend:
+      - ::i2c_master:1.0.0
+
+  sim:
+    files:
+      - tb/i2c_controller_tb.sv: {file_type: systemVerilogSource}
+      - tb/cocotb_env.cpp: {file_type: cppSource, copyto: cocotb_env.cpp}
+      - tb/test_i2c_controller.py: {file_type: user, copyto: test_i2c_controller.py}
+
+targets:
+  default:
+    filesets: [rtl]
+    toplevel: i2c_controller
+
+  sim:
+    filesets: [rtl, sim]
+    toplevel: i2c_controller_tb
+    flow: sim
+    flow_options:
+      tool: verilator
+      cocotb_module: test_i2c_controller
+      mode: cc
+      verilator_options:
+        - --trace
+        - -Wno-WIDTHEXPAND
+        - -LDFLAGS "-Wl,--disable-new-dtags,-rpath,$$(dirname $$(cocotb-config --libpython))"
+      run_options: [--trace, --trace-file, i2c_controller.vcd]
