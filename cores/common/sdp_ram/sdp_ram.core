@@ -1,0 +1,34 @@
+CAPI=2:
+name: ::sdp_ram:1.0.0
+description: Parametric simple dual-port RAM (independent write and read ports)
+
+filesets:
+  rtl:
+    files:
+      - src/sdp_ram.sv
+    file_type: systemVerilogSource
+
+  sim:
+    files:
+      - tb/sdp_ram_tb.sv: {file_type: systemVerilogSource}
+      - tb/cocotb_env.cpp: {file_type: cppSource, copyto: cocotb_env.cpp}
+      - tb/test_sdp_ram.py: {file_type: user, copyto: test_sdp_ram.py}
+
+targets:
+  default:
+    filesets: [rtl]
+    toplevel: sdp_ram
+
+  sim:
+    filesets: [rtl, sim]
+    toplevel: sdp_ram_tb
+    flow: sim
+    flow_options:
+      tool: verilator
+      cocotb_module: test_sdp_ram
+      mode: cc
+      verilator_options:
+        - --trace
+        - -Wno-WIDTHEXPAND
+        - -LDFLAGS "-Wl,--disable-new-dtags,-rpath,$$(dirname $$(cocotb-config --libpython))"
+      run_options: [--trace, --trace-file, sdp_ram.vcd]

@@ -1,0 +1,40 @@
+CAPI=2:
+name: ::axis_packet_fifo:1.0.0
+description: Store-and-forward AXI4-Stream packet FIFO over fifo_sync/fifo_async
+
+filesets:
+  rtl:
+    files:
+      - src/axis_packet_fifo.sv
+    file_type: systemVerilogSource
+    depend:
+      - ::fifo_sync:1.0.0
+      - ::fifo_async:1.0.0
+
+  sim:
+    files:
+      - tb/axis_packet_fifo_tb.sv: {file_type: systemVerilogSource}
+      - tb/cocotb_env.cpp: {file_type: cppSource, copyto: cocotb_env.cpp}
+      - tb/test_axis_packet_fifo.py: {file_type: user, copyto: test_axis_packet_fifo.py}
+    depend:
+      - ::fifo_sync:1.0.0
+      - ::fifo_async:1.0.0
+
+targets:
+  default:
+    filesets: [rtl]
+    toplevel: axis_packet_fifo
+
+  sim:
+    filesets: [rtl, sim]
+    toplevel: axis_packet_fifo_tb
+    flow: sim
+    flow_options:
+      tool: verilator
+      cocotb_module: test_axis_packet_fifo
+      mode: cc
+      verilator_options:
+        - --trace
+        - -Wno-WIDTHEXPAND
+        - -LDFLAGS "-Wl,--disable-new-dtags,-rpath,$$(dirname $$(cocotb-config --libpython))"
+      run_options: [--trace, --trace-file, axis_packet_fifo.vcd]

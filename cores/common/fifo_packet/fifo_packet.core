@@ -1,0 +1,40 @@
+CAPI=2:
+name: ::fifo_packet:1.0.0
+description: Parametric packet (SOP/EOP tagged) FIFO over fifo_sync/fifo_async
+
+filesets:
+  rtl:
+    files:
+      - src/fifo_packet.sv
+    file_type: systemVerilogSource
+    depend:
+      - ::fifo_sync:1.0.0
+      - ::fifo_async:1.0.0
+
+  sim:
+    files:
+      - tb/fifo_packet_tb.sv: {file_type: systemVerilogSource}
+      - tb/cocotb_env.cpp: {file_type: cppSource, copyto: cocotb_env.cpp}
+      - tb/test_fifo_packet.py: {file_type: user, copyto: test_fifo_packet.py}
+    depend:
+      - ::fifo_sync:1.0.0
+      - ::fifo_async:1.0.0
+
+targets:
+  default:
+    filesets: [rtl]
+    toplevel: fifo_packet
+
+  sim:
+    filesets: [rtl, sim]
+    toplevel: fifo_packet_tb
+    flow: sim
+    flow_options:
+      tool: verilator
+      cocotb_module: test_fifo_packet
+      mode: cc
+      verilator_options:
+        - --trace
+        - -Wno-WIDTHEXPAND
+        - -LDFLAGS "-Wl,--disable-new-dtags,-rpath,$$(dirname $$(cocotb-config --libpython))"
+      run_options: [--trace, --trace-file, fifo_packet.vcd]

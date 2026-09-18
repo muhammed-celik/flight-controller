@@ -1,0 +1,38 @@
+CAPI=2:
+name: ::fifo_async:1.0.0
+description: Parametric dual-clock first-word fall-through FIFO built on sdp_ram
+
+filesets:
+  rtl:
+    files:
+      - src/fifo_async.sv
+    file_type: systemVerilogSource
+    depend:
+      - ::sdp_ram:1.0.0
+
+  sim:
+    files:
+      - tb/fifo_async_tb.sv: {file_type: systemVerilogSource}
+      - tb/cocotb_env.cpp: {file_type: cppSource, copyto: cocotb_env.cpp}
+      - tb/test_fifo_async.py: {file_type: user, copyto: test_fifo_async.py}
+    depend:
+      - ::sdp_ram:1.0.0
+
+targets:
+  default:
+    filesets: [rtl]
+    toplevel: fifo_async
+
+  sim:
+    filesets: [rtl, sim]
+    toplevel: fifo_async_tb
+    flow: sim
+    flow_options:
+      tool: verilator
+      cocotb_module: test_fifo_async
+      mode: cc
+      verilator_options:
+        - --trace
+        - -Wno-WIDTHEXPAND
+        - -LDFLAGS "-Wl,--disable-new-dtags,-rpath,$$(dirname $$(cocotb-config --libpython))"
+      run_options: [--trace, --trace-file, fifo_async.vcd]
